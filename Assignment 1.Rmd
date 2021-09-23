@@ -130,7 +130,7 @@ tracts2019 <-
 #Do we need the E behind the variables?
 
 tracts2009 <-  
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E", "B15002_032E", "B03003_003E"),
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E","B15002_032E","B03003_003E"),
   year=2009, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')    
   rename(TotalPop = B25026_001E, 
@@ -140,14 +140,13 @@ tracts2009 <-
          FemaleBachelors = B15002_015E,
          HispanicPop = B03003_003E) %>%
          select(-NAME, -starts_with("B")) %>%
-  mutate(pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-         year = "2009") %>%
-         select(-FemaleBachelors, -MaleBachelors) 
+  mutate(pctBachelors = ifelse(TotalPop > 0,((FemaleBachelors + MaleBachelors)/ TotalPop),0),year = "2009") %>%
+    select(-FemaleBachelors, -MaleBachelors) 
 
 #Year 2019 Tracts
 #Add new variable 
 tracts2019 <- 
-  get_acs(geography = "tract", variables = c("B25026_001","B19013_001E","B25058_001E","B06009_005E","B03003_003E"),
+  get_acs(geography = "tract", variables = c("B25026_001","B19013_001E","B25058_001E","B06009_005E","B03003_003E","B03003_003E"),
                 year=2019, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')%>%
   rename(TotalPop = B25026_001, 
@@ -156,7 +155,7 @@ tracts2019 <-
          Bachelors = B06009_005E,
          HispanicPop = B03003_003E) %>%
   select(-NAME, -starts_with("B")) %>%
-  mutate(pctBachelors = ifelse(TotalPop > 0, ((Bachelors) / TotalPop),0),
+  mutate(pctBachelors = ifelse(TotalPop > 0, ((Bachelors)/TotalPop),0),
          year = "2019") %>%
   select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 
@@ -165,23 +164,21 @@ tracts2019 <-
 #Combine 2009 and 2019 data
 allTracts <- rbind(tracts2009,tracts2019)
 
-#Wrangling transit open data - Stations are MBTA_NODE; Routes are MBTA_ARC
-dat <- read.csv("Kennett+-+June+Survey_August+5,+2021_11.47v2.csv")
-
-
-MBTA <- st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/mbta_rapi_transit/MBTA_NODE.shp")
-
+#Wrangling transit open data - Stations are MBTA_NODE; Routes are MBTA_ARC ---
 MBTAStops <- 
   rbind(
-    st_read("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/mbta_rapid_transit/MBTA_NODE.shp")%>% 
-      #mutate(Line = "El") %>%
-      select(STATION, LINE),
-    st_read("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/mbta_rapid_transit/MBTA_ARC.shp")%>%
-      #mutate(Line ="Broad_St") %>%
-      select(Station, Line)) %>%
-  st_transform(st_crs(tracts2019))  
+    st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/mbta_rapid_transit/MBTA_NODE.shp") %>%
+      select(STATION, LINE)) %>%
+  st_transform(st_crs(tracts2019))
+
+MBTALines <-
+  rbind(
+    st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/mbta_rapid_transit/MBTA_ARC.shp") %>%
+      select(LINE)) %>%
+  st_transform(st_crs(tracts2019))    
 
 #Visualizing this
+
 ggplot() + 
   geom_sf(data=st_union(tracts2019)) +
   geom_sf(data=MBTAStops, 
@@ -193,7 +190,123 @@ ggplot() +
        caption="Figure 1") +
   mapTheme()
 
-#Creating buffers
+# --- MBTA Stops Buffers ----
+
+MBTABuffers <- 
+  rbind(
+    st_buffer(MBTAStops, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(MBTAStops, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+ggplot() +
+  geom_sf(data=MBTABuffers) +
+  geom_sf(data=MBTABuffers, show.legend = "point") +
+  facet_wrap(~Legend) + 
+  labs(caption = "Figure 2") +
+  mapTheme()
+
+# ---- Spatial operations ----
+
+# Consult the text to understand the difference between these three types of joins
+# and discuss which is likely appropriate for this analysis
+
+# Create an sf object with ONLY the unioned buffer
+buffer <- filter(MBTABuffers, Legend=="Unioned Buffer")
+
+# Clip 
+clip <- 
+  st_intersection(buffer, tracts09) %>%
+  dplyr::select(TotalPop) %>%
+  mutate(Selection_Type = "Clip")
+
+# Spatial selection
+selection <- 
+  tracts09[buffer,] %>%
+  dplyr::select(TotalPop) %>%
+  mutate(Selection_Type = "Spatial Selection")
+
+# SelectByCentroids
+
+selectCentroids <-
+  st_centroid(tracts09)[buffer,] %>%
+  st_drop_geometry() %>%
+  left_join(., dplyr::select(tracts09, GEOID)) %>%
+  st_sf() %>%
+  dplyr::select(TotalPop) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+# ---- Vizualising This ----
+
+myData  <- rbind(selectCentroids, clip) %>%
+  rbind(., selection)
+
+ggplot(myData)+
+  geom_sf(data = st_union(tracts09))+
+  geom_sf(aes(fill = q5(TotalPop))) +
+  scale_fill_manual(values = palette5,
+                    labels = qBr(myData, "TotalPop"),
+                    name = "Population\n(Quintile Breaks)") +
+  labs(title = "Total Population", subtitle = "Boston; 2009") +
+  facet_wrap(~Selection_Type)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=20))
+
+
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.14, MedRent))
+
+
+ggplot(allTracts.group)+
+  geom_sf(data = st_union(tracts09))+
+  geom_sf(aes(fill = TOD)) +
+  labs(title = "Time/Space Groups") +
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+
+ggplot(allTracts.group)+
+  geom_sf(data = st_union(tracts09))+
+  geom_sf(aes(fill = q5(MedRent.inf))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red")+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group, "MedRent.inf"),
+                    name = "Rent\n(Quintile Breaks)") +
+  labs(title = "Median Rent 2009-2019", subtitle = "Real Dollars") +
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+# --- TOD Indicator Tables ----
+
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+  group_by(year, TOD) %>%
+  summarize(Rent = mean(MedRent, na.rm = T),
+            Population = mean(TotalPop, na.rm = T),
+            Percent_Hispanic = mean(pctHispanic, na.rm = T),
+            Percent_Bach = mean(pctBachelors, na.rm = T))
+
+kable(allTracts.Summary) %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 2.2")
+
+
 
 ```
 
