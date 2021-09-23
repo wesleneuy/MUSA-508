@@ -85,6 +85,56 @@ qBr <- function(df, variable, rnd) {
 
 q5 <- function(variable) {as.factor(ntile(variable, 5))}
 
+# Multiple Ring Buffer Function
+
+multipleRingBuffer <- function(inputPolygon, maxDistance, interval) 
+{
+  distances <- seq(0, maxDistance, interval)
+  distancesCounter <- 2
+  numberOfRings <- floor(maxDistance / interval)
+  numberOfRingsCounter <- 1
+  allRings <- data.frame()
+  
+  while (numberOfRingsCounter <= numberOfRings) 
+  {
+    if(distances[distancesCounter] < 0 & distancesCounter == 2)
+    {
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      buffer1_ <- st_difference(inputPolygon, buffer1)
+      thisRing <- st_cast(buffer1_, "POLYGON")
+      #take the last column which is 'geometry'
+      thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      thisRing$distance <- distances[distancesCounter]
+    }
+    
+    else if(distances[distancesCounter] < 0 & distancesCounter > 2) 
+    {
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      buffer2 <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      thisRing <- st_difference(buffer2,buffer1)
+      thisRing <- st_cast(thisRing, "POLYGON")
+      thisRing <- as.data.frame(thisRing$geometry)
+      thisRing$distance <- distances[distancesCounter]
+    }
+    
+    else 
+    {
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      buffer1_ <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      thisRing <- st_difference(buffer1,buffer1_)
+      thisRing <- st_cast(thisRing, "POLYGON")
+      #geometry column as a data frame
+      thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      thisRing$distance <- distances[distancesCounter]
+    }  
+    
+    allRings <- rbind(allRings, thisRing)
+    distancesCounter <- distancesCounter + 1
+    numberOfRingsCounter <- numberOfRingsCounter + 1
+  }
+  allRings <- st_as_sf(allRings)
+}
+
 # Load hexadecimal color palette
 
 palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
@@ -156,23 +206,29 @@ tracts09 <-
   dplyr::select(-HispanicPop,-FemaleBachelors,-MaleBachelors)
 
 #Year 2019 Tracts
-#Add new variable 
-tracts19 <-
+tracts19 <-  
   get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E","B15002_032E","B03003_003E"),
           year=2019, state=25, county=025, geometry=T) %>% 
-  st_transform('ESRI:102286')%>%
+  st_transform('ESRI:102286')
+
+tracts19 <- 
+  tracts19 %>%
+  dplyr::select( -NAME, -moe) %>%
+  spread(variable, estimate) %>%
+  dplyr::select(-geometry) %>%
   rename(TotalPop = B25026_001, 
          MedHHInc = B19013_001, 
          MedRent = B25058_001,
          MaleBachelors = B15002_015,
          FemaleBachelors = B15002_032,
-         HispanicPop = B03003_003) %>%
-  select(-NAME, -starts_with("B")) %>%
+         HispanicPop = B03003_003)
+
+tracts19 <- 
+  tracts19 %>%
   mutate(pctHispanic = ifelse(TotalPop > 0, HispanicPop / TotalPop, 0),
                pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
                year = "2019") %>%
-  dplyr::select(-HispanicPop,-FemaleBachelors,-MaleBachelors)  
-
+  dplyr::select(-HispanicPop,-FemaleBachelors,-MaleBachelors)
 
 
 #Combine 2009 and 2019 data
@@ -184,11 +240,7 @@ MBTAStops <-
       select(STATION, LINE) %>%
   st_transform(st_crs(tracts2019))
 
-MBTALines <-
-  rbind(
-    st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/mbta_rapid_transit/MBTA_ARC.shp") %>%
-      select(LINE)) %>%
-  st_transform(st_crs(tracts2019))    
+    
 
 #Visualizing this
 
@@ -220,6 +272,34 @@ ggplot() +
   facet_wrap(~Legend) + 
   labs(caption = "Figure 2") +
   mapTheme()
+
+# --- Multiple Buffer Rings ----
+Multibuffer_union=st_union(MBTABuffers)%>%
+  st_sf()
+
+MRBuffer <-
+  st_join(
+    st_centroid(dplyr::select(allTracts, GEOID, year)),
+    multipleRingBuffer(Multibuffer_union,10000,804.672)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedRent, year),
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  replace_na(list(distance = 0))%>% 
+  mutate(distance = distance+804.672)
+
+Bostonbdry <- st_union(tracts19) %>%
+  st_sf()
+
+ggplot() +
+  geom_sf(data=multipleRingBuffer(Multibuffer_union,10000,804.672))+
+  geom_sf(data=Bostonbdry,fill = "transparent",color="black",size=1)+
+  geom_sf(data = MBTAStops,size=1)+
+  labs(
+    title = "Half Mile Buffers",
+    subtitle="Boston Boundary overlayed"
+  ) +
+  mapTheme()+  theme(plot.title = element_text(size=22))
 
 # ---- Spatial operations ----
 
