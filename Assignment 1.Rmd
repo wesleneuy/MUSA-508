@@ -104,7 +104,7 @@ acs_variable_list.2019 <- load_variables(2019,
 
 #Year 2000 tracts - Population, Income, Rent, Bachelor's Degree
 tracts2000 <-  
-  get_decennial(geography = "tract", variables = c("P001001","P053001","H056001",), 
+  get_decennial(geography = "tract", variables = c("P001001","P053001","H056001"), 
                 year=2000, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')
 
@@ -121,30 +121,40 @@ tracts2019 <-
   st_transform('ESRI:102286')
 
 #need to edit state and county geoid for Boston, MA. Also need to add one more variable - we use the population variable to get the percentages
+
+#new variables to add <- B03003_003 (HispanicPopulation) or B02001_002 (WhitePopulation) #Boston is pretty white but it would be good to see how latinos have moved around the area.
+            
+
 #Year 2009 tracts
+#Getting an error here: Error in rename(TotalPop = B25026_001, MedHHInc = B19013_001E, MedRent = B25058_001E,  : object 'B25026_001' not found
+#Do we need the E behind the variables?
+
 tracts2009 <-  
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E", "B15002_032E"),
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E", "B15002_032E", "B03003_003E"),
   year=2009, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')    
   rename(TotalPop = B25026_001E, 
          MedHHInc = B19013_001E, 
          MedRent = B25058_001E,
          MaleBachelors = B25058_001E,
-         FemaleBachelors = B15002_015E) %>%
+         FemaleBachelors = B15002_015E,
+         HispanicPop = B03003_003E) %>%
          select(-NAME, -starts_with("B")) %>%
   mutate(pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
          year = "2009") %>%
          select(-FemaleBachelors, -MaleBachelors) 
 
 #Year 2019 Tracts
+#Add new variable 
 tracts2019 <- 
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B06009_005E"),
-                year=2019, state=42, county=101, geometry=T) %>% 
+  get_acs(geography = "tract", variables = c("B25026_001","B19013_001E","B25058_001E","B06009_005E","B03003_003E"),
+                year=2019, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')%>%
-  rename(TotalPop = B25026_001E, 
+  rename(TotalPop = B25026_001, 
          MedHHInc = B19013_001E, 
          MedRent = B25058_001E,
-         Bachelors = B06009_005E) %>%
+         Bachelors = B06009_005E,
+         HispanicPop = B03003_003E) %>%
   select(-NAME, -starts_with("B")) %>%
   mutate(pctBachelors = ifelse(TotalPop > 0, ((Bachelors) / TotalPop),0),
          year = "2019") %>%
@@ -158,7 +168,8 @@ allTracts <- rbind(tracts2009,tracts2019)
 #Wrangling transit open data - Stations are MBTA_NODE; Routes are MBTA_ARC
 dat <- read.csv("Kennett+-+June+Survey_August+5,+2021_11.47v2.csv")
 
-MBTA <- st_read("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/mbta_rapid_transit/MBTA_NODE.shp")
+
+MBTA <- st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/mbta_rapi_transit/MBTA_NODE.shp")
 
 MBTAStops <- 
   rbind(
