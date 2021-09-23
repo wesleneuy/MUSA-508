@@ -109,15 +109,17 @@ tracts2000 <-
   st_transform('ESRI:102286')
 
 #Year 2009 tracts - B15002_015 Male Bachelor's Degree; B15002_032 Female Bachelor's Degree
-tracts2009 <-  
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E", "B15002_032E"),
-                year=2009, state=25, county=025, geometry=T) %>% 
+
+#Tracts 2009
+tracts09 <-  
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E","B15002_032E","B03003_003E"),
+          year=2009, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')
 
-#Year 2019 tracts
-tracts2019 <-  
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B06009_005E"),
-                year=2019, state=25, county=025, geometry=T) %>% 
+#Tracts 2019
+tracts19 <-  
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E","B15002_032E","B03003_003E"),
+          year=2019, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')
 
 #need to edit state and county geoid for Boston, MA. Also need to add one more variable - we use the population variable to get the percentages
@@ -129,35 +131,47 @@ tracts2019 <-
 #Getting an error here: Error in rename(TotalPop = B25026_001, MedHHInc = B19013_001E, MedRent = B25058_001E,  : object 'B25026_001' not found
 #Do we need the E behind the variables?
 
-tracts2009 <-  
+tracts09 <-  
   get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E","B15002_032E","B03003_003E"),
   year=2009, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')    
-  rename(TotalPop = B25026_001E, 
-         MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         MaleBachelors = B25058_001E,
-         FemaleBachelors = B15002_015E,
-         HispanicPop = B03003_003E) %>%
-         select(-NAME, -starts_with("B")) %>%
-  mutate(pctBachelors = ifelse(TotalPop > 0,((FemaleBachelors + MaleBachelors)/ TotalPop),0),year = "2009") %>%
-    select(-FemaleBachelors, -MaleBachelors) 
+
+tracts09 <- 
+  tracts09 %>%
+  dplyr::select( -NAME, -moe) %>%
+  spread(variable, estimate) %>%
+  dplyr::select(-geometry) %>%
+  rename(TotalPop = B25026_001, 
+         MedHHInc = B19013_001, 
+         MedRent = B25058_001,
+         MaleBachelors = B15002_015,
+         FemaleBachelors = B15002_032,
+         HispanicPop = B03003_003) 
+
+tracts09 <- 
+  tracts09 %>%
+  mutate(pctHispanic = ifelse(TotalPop > 0, HispanicPop / TotalPop, 0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
+         year = "2009") %>%
+  dplyr::select(-HispanicPop,-FemaleBachelors,-MaleBachelors)
 
 #Year 2019 Tracts
 #Add new variable 
-tracts2019 <- 
-  get_acs(geography = "tract", variables = c("B25026_001","B19013_001E","B25058_001E","B06009_005E","B03003_003E","B03003_003E"),
-                year=2019, state=25, county=025, geometry=T) %>% 
+tracts19 <-
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E","B15002_032E","B03003_003E"),
+          year=2019, state=25, county=025, geometry=T) %>% 
   st_transform('ESRI:102286')%>%
   rename(TotalPop = B25026_001, 
-         MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         Bachelors = B06009_005E,
-         HispanicPop = B03003_003E) %>%
+         MedHHInc = B19013_001, 
+         MedRent = B25058_001,
+         MaleBachelors = B15002_015,
+         FemaleBachelors = B15002_032,
+         HispanicPop = B03003_003) %>%
   select(-NAME, -starts_with("B")) %>%
-  mutate(pctBachelors = ifelse(TotalPop > 0, ((Bachelors)/TotalPop),0),
-         year = "2019") %>%
-  select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+  mutate(pctHispanic = ifelse(TotalPop > 0, HispanicPop / TotalPop, 0),
+               pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
+               year = "2019") %>%
+  dplyr::select(-HispanicPop,-FemaleBachelors,-MaleBachelors)  
 
 
 
@@ -166,9 +180,8 @@ allTracts <- rbind(tracts2009,tracts2019)
 
 #Wrangling transit open data - Stations are MBTA_NODE; Routes are MBTA_ARC ---
 MBTAStops <- 
-  rbind(
     st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/mbta_rapid_transit/MBTA_NODE.shp") %>%
-      select(STATION, LINE)) %>%
+      select(STATION, LINE) %>%
   st_transform(st_crs(tracts2019))
 
 MBTALines <-
@@ -183,7 +196,7 @@ ggplot() +
   geom_sf(data=st_union(tracts2019)) +
   geom_sf(data=MBTAStops, 
           aes(colour = Line), 
-          show.legend = "point", size= 2) +
+          show.legend = "point", size= 5) +
   scale_colour_manual(values = c("orange","blue")) +
   labs(title="MBTA Stops", 
        subtitle="Boston, MA", 
