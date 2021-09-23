@@ -10,7 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Load Libraries
 install.packages("crimedata")
-library(crimedata)
+install.packages("kable")
+install.packages("kableExtra")
+library(crimedata) #Getting this: Error in library(crimedata) : there is no package called ‘crimedata’ 
 library(tidyverse)
 library(tidycensus)
 library(sf)
