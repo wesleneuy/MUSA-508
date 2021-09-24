@@ -391,12 +391,6 @@ crime_2019 <- get_crime_data(
   cities = c("Boston"), 
   type = "core") %>%
   filter(offense_type == "assault offenses")
-  
-
-tracts_crimecount <- tracts_crimecount %>%
-  select(1:9)
-
-
 
 crime_2019 <- crime_2019%>%
   st_as_sf(coords = c("longitude","latitude"), crs=st_crs(4326),agr="constant") %>%
@@ -407,6 +401,9 @@ crime_count <- count(as_tibble(tracts_crime), GEOID)
 tracts_crimecount <- left_join(crime_count, tracts_crime) %>%
   rename("Crimecount" = n) %>%
   st_as_sf()
+
+tracts_crimecount <- tracts_crimecount %>%
+  select(1:9)
 
 ggplot(tracts_crimecount[tracts19,])+
   geom_sf(data = tracts19, fill = "antiquewhite1", color = "grey75")+
