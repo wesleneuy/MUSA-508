@@ -288,18 +288,56 @@ MRBuffer <-
   replace_na(list(distance = 0))%>% 
   mutate(distance = distance+804.672)
 
-Bostonbdry <- st_union(tracts19) %>%
+Bostonbdry <- st_union(tracts09) %>%
   st_sf()
 
+#MultipleRingBuffer Plot
 ggplot() +
   geom_sf(data=multipleRingBuffer(Multibuffer_union,10000,804.672))+
-  geom_sf(data=Bostonbdry,fill = "transparent",color="black",size=1)+
-  geom_sf(data = MBTAStops,size=1)+
+  geom_sf(data=Bostonbdry,fill = "transparent",color="black",size=0.5)+
+  geom_sf(data = MBTAStops,size=0.5)+
   labs(
     title = "Half Mile Buffers",
     subtitle="Boston Boundary overlayed"
   ) +
   mapTheme()+  theme(plot.title = element_text(size=22))
+
+#Distance to MBTAStops
+ggplot(MRBuffer)+
+  geom_sf(color=NA,aes(fill = q5(distance))) +
+  geom_sf(data = MBTAStops,size=0.5)+
+  geom_sf(data=allTracts,fill = "transparent",color=NA)+
+  geom_sf(data = Multibuffer_union, fill = "transparent", color = "red",size=0.5)+
+  geom_sf()
+  scale_fill_manual(values = palette5,
+                    labels = qBr(MRBuffer, "distance"),
+                    name = "Distance\n(Quintile Breaks)") +
+  labs(
+    title = "Distance to TOD area 2009-2019",
+    subtitle = "Buffer is areas within 0.5 mile from MBTA Stops"
+    ) +
+  mapTheme() + 
+  theme(plot.title = element_text(size=20))
+  
+#Mean Rent as a function of distance to MBTA Stops  
+  
+MeanRent=MRBuffer%>%
+  group_by(year,distance)%>%
+  summarise(avgRent=mean(MedRent,na.rm=TRUE))
+
+#Plot
+ggplot(MeanRent, aes(y=avgRent, x=distance)) + 
+  geom_line(aes(group=year, color=year), size = 1.5) + 
+  geom_point(aes(color=year), size = 4,shape = 21, fill = "white") +
+  scale_color_manual(values = c("#2166ac", "#ef8a62"),name="Year")+
+  labs(
+    title = "Rent as a function of Distance to MBTA Stops", 
+    caption = "
+Line plot 1
+
+Insert description of line graph here"
+    ) +
+  plotTheme() + theme(plot.title = element_text(size=18),legend.position="right")
 
 # ---- Spatial operations ----
 
@@ -331,7 +369,7 @@ selectCentroids <-
   dplyr::select(TotalPop) %>%
   mutate(Selection_Type = "Select by Centroids")
 
-# ---- Vizualising This ----
+# ---- Visualizing This ----
 
 myData  <- rbind(selectCentroids, clip) %>%
   rbind(., selection)
@@ -399,7 +437,8 @@ kable(allTracts.Summary) %>%
   footnote(general_title = "\n",
            general = "Table 2.2")
 
-
+```
+```
 
 ```
 
