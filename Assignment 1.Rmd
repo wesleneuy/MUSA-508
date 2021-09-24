@@ -377,16 +377,26 @@ ggplot() +
   scale_fill_manual(labels = qBr(selectCentroids, "MedRent"),
                     name = "MedRent\n(Quintile Breaks)") +
   labs(
-    title = "MedRent within TOD Area between 2009-2019"
-    #subtitle = "Real Dollar, The black boarders denote areas close to subway stations.",
+    title = "MedRent within TOD Area between 2009-2019")+
+    #subtitle = #
     #caption=
-    ) +
   mapTheme()+theme(plot.title = element_text(size=22))
 
+#Crime data
+# Read the CSV file with latitudes and longitudes
+library(crimedata)
+
+crime_2019 <- get_crime_data(
+  years = 2019, 
   cities = c("Boston"), 
-  type = "core"
-) %>%
+  type = "core") %>%
   filter(offense_type == "assault offenses")
+  
+
+tracts_crimecount <- tracts_crimecount %>%
+  select(1:9)
+
+
 
 crime_2019 <- crime_2019%>%
   st_as_sf(coords = c("longitude","latitude"), crs=st_crs(4326),agr="constant") %>%
@@ -397,15 +407,6 @@ crime_count <- count(as_tibble(tracts_crime), GEOID)
 tracts_crimecount <- left_join(crime_count, tracts_crime) %>%
   rename("Crimecount" = n) %>%
   st_as_sf()
-
-#Crime data
-# Read the CSV file with latitudes and longitudes
-library(crimedata)
-
-crime_2019 <- get_crime_data(
-  years = 2019, 
-tracts_crimecount <- tracts_crimecount %>%
-  dplyr::select(1:9)
 
 ggplot(tracts_crimecount[tracts19,])+
   geom_sf(data = tracts19, fill = "antiquewhite1", color = "grey75")+
@@ -430,8 +431,6 @@ points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
 plot(st_geometry(points), pch=16, col="navy")
 plot(points$geometry, pch=16, col="navy")
 
-# Optional save the points to a GeoJSON file for later use
-st_write(points, dsn="cracker-barrel.geojson")
 ```
 
 ## Including Plots
