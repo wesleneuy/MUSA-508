@@ -170,13 +170,7 @@ allTracts <- rbind(tracts09,tracts19)
 df <- st_union(tracts19) %>% st_sf()
 
 #Wrangling transit open data 
-
-MBTA <- st_read("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/mbta_rapid_transit/MBTA_NODE.shp")%>%
-select(STATION, LINE)%>%
-st_transform(st_crs(tracts19)) 
-
-#Visualizing this
-ggplot() + 
+df <- ggplot() + 
   geom_sf(data=st_union(tracts19)) +
   geom_sf(data=MBTA, 
           aes(colour = LINE), 
@@ -185,6 +179,13 @@ ggplot() +
   labs(title="MBTA Stops", 
        subtitle="Boston, MA", 
        caption="Figure 1") 
+
+MBTA <- st_read("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/mbta_rapid_transit/MBTA_NODE.shp")%>%
+select(STATION, LINE)%>%
+st_transform(st_crs(tracts19)) 
+
+#Visualizing this
+
  
 
 #Creating buffers
@@ -257,6 +258,81 @@ allTracts.Summary %>%
     scale_fill_manual(values = c("#0492c2", "#ef4f45")) +
     labs(title = "Indicator differences across time and space") + theme(legend.position="bottom")
 
+#Population
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(TotalPop))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=1)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "TotalPop"),
+                    name = "Population\n(Quintile Breaks)") +
+  labs(
+    title = "Population 2009-2019")+
+   # subtitle = 
+   # caption = 
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+#median rent
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(MedRent))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=1)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "MedRent"),
+                    name = "MedRent\n(Quintile Breaks)") +
+  labs(
+    title = "Median Rent 2009-2019")+
+   # subtitle = 
+   # caption = 
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+#Hispanic
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(pctHispanic))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=1)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "pctHispanic"),
+                    name = "pctHispanic\n(Quintile Breaks)") +
+  labs(
+    title = "Percent Hispanic 2009-2019")+
+   # subtitle = 
+   # caption = 
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+#Bachelors
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(pctBachelors))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=1)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "pctBachelors"),
+                    name = "pctBachelors\n(Quintile Breaks)") +
+  labs(
+    title = "Percent Bachelors 2009-2019")+
+   # subtitle = 
+   # caption = 
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+#Income
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(MedHHInc))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=1)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "MedHHInc"),
+                    name = "MedHHInc\n(Quintile Breaks)") +
+  labs(
+    title = "Median Household Income 2009-2019")+
+   # subtitle = 
+   # caption = 
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
 #Graduated symbol maps of population 
 selectCentroids <-
   st_centroid(allTracts)[buffer,] %>%
@@ -307,10 +383,44 @@ ggplot() +
     ) +
   mapTheme()+theme(plot.title = element_text(size=22))
 
+  cities = c("Boston"), 
+  type = "core"
+) %>%
+  filter(offense_type == "assault offenses")
+
+crime_2019 <- crime_2019%>%
+  st_as_sf(coords = c("longitude","latitude"), crs=st_crs(4326),agr="constant") %>%
+  st_transform(st_crs(allTracts))
+
+tracts_crime <- st_join(allTracts, crime_2019, join = st_intersects) 
+crime_count <- count(as_tibble(tracts_crime), GEOID)
+tracts_crimecount <- left_join(crime_count, tracts_crime) %>%
+  rename("Crimecount" = n) %>%
+  st_as_sf()
+
 #Crime data
 # Read the CSV file with latitudes and longitudes
-crimedata = read.csv("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/2019 Crime Incidents.csv", stringsAsFactors = FALSE)
+library(crimedata)
 
+crime_2019 <- get_crime_data(
+  years = 2019, 
+tracts_crimecount <- tracts_crimecount %>%
+  dplyr::select(1:9)
+
+ggplot(tracts_crimecount[tracts19,])+
+  geom_sf(data = tracts19, fill = "antiquewhite1", color = "grey75")+
+  geom_sf(aes(fill = q5(Crimecount))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red") +
+  scale_fill_manual(values = palette5,
+                    labels = qBr(tracts_crimecount, "Crimecount"),
+                    name = "Crime count\n(Quintile Breaks)") +
+  labs(title = "Crime count 2009-2017", subtitle = "The red border denotes areas close to rail stations") +
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+#crime data using dataset downloaded from Boston Open Data
+crimedata = read.csv("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/2019 Crime Incidents.csv", stringsAsFactors = FALSE)
 
 # Convert lat/long to simple features points
 points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
