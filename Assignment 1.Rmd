@@ -9,10 +9,8 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 ## Load Libraries
-install.packages("crimedata")
 install.packages("kable")
 install.packages("kableExtra")
-library(crimedata) #Getting this: Error in library(crimedata) : there is no package called ‘crimedata’ 
 library(tidyverse)
 library(tidycensus)
 library(sf)
@@ -70,6 +68,9 @@ plotTheme <- function(base_size = 12) {
     strip.text.x = element_text(size = 14)
   )
 }
+```
+
+```{r functions, warning = FALSE}
 
 # Load Quantile break functions
 
@@ -419,6 +420,58 @@ kable(allTracts.Summary) %>%
   kable_styling() %>%
   footnote(general_title = "\n",
            general = "Table 2.2")
+
+
+
+#Crime data
+# Read the CSV file with latitudes and longitudes
+install.packages("crimedata") #installed if not
+library(crimedata)
+
+
+crime_2019 <- get_crime_data(
+  years = 2019, 
+  cities = NULL, 
+  type = "core",
+  cache = FALSE,
+  output = "sf") %>%
+  filter(offense_type == "assault offenses")
+
+glimpse(crime_2019)
+  
+tracts_crimecount <- tracts_crimecount %>%
+  select(1:9)
+crime_2019 <- crime_2019%>%
+  st_as_sf(coords = c("longitude","latitude"), crs=st_crs(4326),agr="constant") %>%
+  st_transform(st_crs(allTracts))
+tracts_crime <- st_join(allTracts, crime_2019, join = st_intersects) 
+crime_count <- count(as_tibble(tracts_crime), GEOID)
+tracts_crimecount <- left_join(crime_count, tracts_crime) %>%
+  rename("Crimecount" = n) %>%
+  st_as_sf()
+
+
+ggplot(tracts_crimecount[tracts19,])+
+  geom_sf(data = tracts19, fill = "antiquewhite1", color = "grey75")+
+  geom_sf(aes(fill = q5(Crimecount))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red") +
+  scale_fill_manual(values = palette5,
+                    labels = qBr(tracts_crimecount, "Crimecount"),
+                    name = "Crime count\n(Quintile Breaks)") +
+  labs(title = "Crime count 2009-2017", subtitle = "The red border denotes areas close to rail stations") +
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+#crime data using dataset downloaded from Boston Open Data
+crimedata = read.csv("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/2019 Crime Incidents.csv", stringsAsFactors = FALSE)
+# Convert lat/long to simple features points
+points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
+'ESRI:102286'
+# Simple x/y plot of the points
+plot(st_geometry(points), pch=16, col="navy")
+plot(points$geometry, pch=16, col="navy")
+# Optional save the points to a GeoJSON file for later use
+st_write(points, dsn="cracker-barrel.geojson")
 
 ```
 ```
