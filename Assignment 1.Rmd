@@ -657,17 +657,18 @@ tracts_crimecount <- tracts_crimecount %>%
 
 ?st_drop_geometry
 
-
+#This would always give me an error - Error in dplyr::select(GEOID, Crimecount, MedRent, TOD, MedRent.inf, year) : object 'GEOID' not found
 Crime_MRBuffer <-
   st_join(
     dplyr::select(tracts_crimecount, GEOID, Crimecount, MedRent,TOD, MedRent.inf,year),
-    multipleRingBuffer(Multibuffer_union,10000,804.672)) %>%
+    multipleRingBuffer(Multibuffer_union,10000,804.672))%>%
+  st_drop_geometry()%>%
   left_join(dplyr::select(GEOID, Crimecount, MedRent,TOD, MedRent.inf,year),
-            by=c("year"="year")) %>%
+            by=c("GEOID"="GEOID","year"="year")) %>%
   st_sf() %>%  
   replace_na(list(distance = 0))%>% 
   mutate(distance = distance+804.672)
-
+#Because the buffer would not work, then this doesnt work either
 CrimeSum <- 
   Crime_MRBuffer %>%
   st_drop_geometry() %>%
@@ -689,27 +690,26 @@ ggplot(tracts_crimecount[tracts19,])+
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(MedRent)))+
   geom_sf(data = crime_1619, color = "darkred",size=0.15,alpha=0.75)+
-  geom_sf(data = Multibuffer_union, fill = "transparent", color = "darkred",size=0.75) +
+  geom_sf(data = Multibuffer_union, fill = "transparent",color = "darkred",size=0.75) +
+  facet_wrap(~year)+
+  scale_size(range = c(0,7))+
   scale_fill_manual(values = palette5,
                     labels = qBr(allTracts, "MedRent"),
                     name = "Median Rent\n(Quintile Breaks)") +
-  labs(title = "Crime overlapped with Median Rent 2016-2019", subtitle = "Red boundary represents TOD areas within 0.5 mile")
+  labs(title = "Assaults overlapped with Median Rent 2016-2019", subtitle = "Red boundary represents TOD areas within 0.5 mile")
 
 
-#This plot is not done. 
-ggplot(MeanRent, aes(y=avgRent, x=distance)) + 
-  geom_line(aes(group=year, color=year), size = 1.5) + 
-  geom_point(aes(color=year), size = 4,shape = 21, fill = "white") +
-  scale_color_manual(values = c("#ffb4a2", "#6d6875"),name="Year")+
-  labs(
-    title = "Rent as a function of Distance to MBTA Stops", 
-    caption = "
-Line plot:
+Assaults.Summary <- 
+  st_drop_geometry(tracts_crimecount) %>%
+  group_by(year, TOD) %>%
+  summarize(CrimeSum = sum(counter, na.rm = T)) %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) 
 
-Rent distribution relative to MBTA Stops proximity has stayed about the same as in 2009. 
-Rents overall in 2019 have increased, even in places up to 5k meters away."
-    ) +
-  plotTheme() + theme(plot.title = element_text(size=18),legend.position="right")
+```
+```{r}
+#Policy-relevant conclusions
+
+
 
 
 
