@@ -1,5 +1,5 @@
 ---
-title: "MUSA 508 Assignment 1"
+title: "MUSA 508 Assignment 1: TOD Analysis in Boston"
 author: "Veronica Rosado & Weslene Uy"
 date: "9/22/2021"
 output: html_document
@@ -7,14 +7,12 @@ output: html_document
 ```{r Intro, message=FALSE, warning=FALSE, include=FALSE}
 
 #Assignment 1 - Transit Oriented Development TOD
-#Code worked in collaboration with Weslene UY
-#Weitzman School of Design
 
 #Brief motivation:
-#The purpose of this small TOD analysis is to see how demographic and economic changes near Boston's MBTA have changed from 2009 to 2019. Boston's subway system is among the oldest ones in the country, founded in 1894 by private entrerprises that later sold the entire transit system to the MBTA in 1942. With this study we looked at population, rent, income, race and education as indicators for determining development patterns near Boston's subway and train stations. 
+#The purpose of this small TOD analysis is to see how demographic and economic changes near Boston's MBTA have changed from 2009 to 2019. Boston's subway system is among the oldest ones in the country, founded in 1894 by private enterprises that later sold the entire transit system to the MBTA in 1942. With this study we looked at population, rent, income, race and education as indicators for determining development patterns near Boston's subway and train stations. 
 
 
-knitr::include_graphics('C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MBTA_map.png')
+#knitr::include_graphics('C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/MBTA_map.png')
 ```
 
 
@@ -225,12 +223,12 @@ allTracts <- rbind(tracts09,tracts19)
 
 #Wrangling transit open data - Stations are MBTA_NODE; Routes are MBTA_ARC. In this case we will only use MBTA_NODE ---
 MBTAStops <- 
-    st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/mbta_rapid_transit/MBTA_NODE.shp") %>%
+    st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/mbta_rapid_transit/MBTA_NODE.shp") %>%
       select(STATION, LINE) %>%
   st_transform(st_crs(tracts19))
 
 MBTALines <- 
-    st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/mbta_rapid_transit/MBTA_ARC.shp") %>%
+    st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/mbta_rapid_transit/MBTA_ARC.shp") %>%
       select(LINE) %>%
   st_transform(st_crs(tracts19))
 
@@ -587,7 +585,7 @@ ggplot(MRBuffer)+
 ```
 
 
-```{r}
+```{r echo=FALSE, warning=FALSE}
 #Question 6: Geom_line plot
 #Mean Rent as a function of distance to MBTA Stops  
 MeanRent=MRBuffer%>%
@@ -611,10 +609,10 @@ Rents overall in 2019 have increased, even in places up to 5k meters away."
 
 ```
 
-```{r Crime data, warning=FALSE}
+```{r Crime data, echo=FALSE, warning=FALSE}
 #Crime data
-# Read the CSV file with latitudes and longitudes
-install.packages("crimedata") #installed if not
+#Read the CSV file with latitudes and longitudes
+#installed if not
 library(crimedata)
 
 #Data fr 2019
@@ -669,7 +667,7 @@ ggplot(tracts_crimecount[tracts19,])+
   labs(title = "Crime count 2016-2019", subtitle = "") 
 ```
 
-```{r warning=FALSE}
+```{r echo=FALSE, warning=FALSE}
 #Crime and Median Rent
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(MedRent)))+
@@ -683,7 +681,7 @@ ggplot(allTracts)+
   labs(title = "Assaults overlapped with Median Rent 2016-2019", subtitle = "Red boundary represents TOD areas within 0.5 mile")
 ```
 
-```{r warning=FALSE}
+```{r echo=FALSE, warning=FALSE}
 #Crime and Rent Bar Plots
 Assaults.Summary <- 
   st_drop_geometry(tracts_crimecount) %>%
@@ -707,7 +705,8 @@ Rent inflation within TOD areas might be a factor for crime decrease, but it is 
 theme(legend.position="right")
 ```
 
-```{r Conclusions, warning=FALSE}
+```{r Conclusions, echo=FALSE, warning=FALSE}
+
 #Policy-relevant conclusions
 
 #Based on the visualizations, some important demographic changes are happening in the Boston. While population within TOD areas is slightly less than in non-TOD areas. The percent of hispanics and people holding bachelor degrees is still higher within TOD areas, which could be an opportunity for greater development in the downtown area. Although we would need several additional indicators on tenure, jobs and population density (to name a few) to make more accurate conclusions. 
@@ -716,35 +715,13 @@ theme(legend.position="right")
 
 #Rents are higher in TOD areas but within the 10 year frame, rents went higher in non-TOD areas. Greater relative inflation in non-TOD areas might not be driving decisions on where people choose to live, more than crime and income.
 
-
-#Alternative to using the crimedata package: 
-#crime data using dataset downloaded from Boston Open Data
-crimedata = read.csv("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/2019 Crime Incidents.csv", stringsAsFactors = FALSE)
-# Convert lat/long to simple features points
-points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
-'ESRI:102286'
-# Simple x/y plot of the points
-plot(st_geometry(points), pch=16, col="navy")
-plot(points$geometry, pch=16, col="navy")
-
-
-# Convert lat/long to simple features points
-points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
-'ESRI:102286'
-# Simple x/y plot of the points
-plot(st_geometry(points), pch=16, col="navy")
-plot(points$geometry, pch=16, col="navy")
-# Optional save the points to a GeoJSON file for later use
-st_write(points, dsn="cracker-barrel.geojson")
-
 ```
-
 
 ## Including Plots
 
 You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
+```{r test, echo=FALSE}
 plot(pressure)
 ```
 
