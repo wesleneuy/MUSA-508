@@ -614,27 +614,60 @@ Rents overall in 2019 have increased, even in places up to 5k meters away."
 install.packages("crimedata") #installed if not
 library(crimedata)
 
+#Data fr 2019
 crime_2019 <- get_crime_data(
   years = 2019, 
   cities = "Boston", 
   type = "core",
-  output = "sf") 
-
-  filter(offense_type == "assault offenses")
-
-glimpse(crime_2019)
-  
-tracts_crimecount <- tracts_crimecount %>%
-  select(1:9)
-crime_2019 <- crime_2019%>%
+  output = "sf") %>%
+  filter(offense_group == "assault offenses")
+#Converting to Lat Long
+crime_2019 <- crime_2019 %>%
   st_as_sf(coords = c("longitude","latitude"), crs=st_crs(4326),agr="constant") %>%
   st_transform(st_crs(allTracts))
-tracts_crime <- st_join(allTracts, crime_2019, join = st_intersects) 
+
+
+#Crime for 2016
+crime_2016 <- get_crime_data(
+  years = 2016, 
+  cities = "Boston", 
+  type = "core",
+  output = "sf") %>%
+  filter(offense_group == "assault offenses")
+crime_2016 <- crime_2016 %>%
+  st_as_sf(coords = c("longitude","latitude"), crs=st_crs(4326),agr="constant") %>%
+  st_transform(st_crs(allTracts))
+
+#Intersecting Tracts with Crime data
+crime_1619 <- rbind(crime_2016, crime_2019) %>%
+  st_transform(st_crs(allTracts))
+
+tracts_crime <- st_join(allTracts.group, crime_1619, join = st_intersects) 
+
+#Counting crimes
 crime_count <- count(as_tibble(tracts_crime), GEOID)
+
+#Renaming
 tracts_crimecount <- left_join(crime_count, tracts_crime) %>%
   rename("Crimecount" = n) %>%
   st_as_sf()
 
+tracts_crimecount <- tracts_crimecount %>%
+  select(1:9)
+
+?st_drop_geometry
+
+
+Crime_MRBuffer <-
+  st_join(
+    dplyr::select(tracts_crimecount),
+    multipleRingBuffer(Multibuffer_union,10000,804.672)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(GEOID, Crimecount, MedRent, year, TOD, MedRent.inf),
+            by=c("GEOID"="GEOID", "MedRent.inf"="MedRent.inf")) %>%
+  st_sf() %>%  
+  replace_na(list(distance = 0))%>% 
+  mutate(distance = distance+804.672)
 
 ggplot(tracts_crimecount[tracts19,])+
   geom_sf(data = tracts19, fill = "antiquewhite1", color = "grey75")+
@@ -643,12 +676,21 @@ ggplot(tracts_crimecount[tracts19,])+
   scale_fill_manual(values = palette5,
                     labels = qBr(tracts_crimecount, "Crimecount"),
                     name = "Crime count\n(Quintile Breaks)") +
-  labs(title = "Crime count 2009-2017", subtitle = "The red border denotes areas close to rail stations") +
-  facet_wrap(~year)+
-  mapTheme() + 
-  theme(plot.title = element_text(size=22))
+  labs(title = "Crime count 2016-2019", subtitle = "") 
+
+
+
+#Alternative to using the crimedatapackage: 
 #crime data using dataset downloaded from Boston Open Data
 crimedata = read.csv("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/2019 Crime Incidents.csv", stringsAsFactors = FALSE)
+# Convert lat/long to simple features points
+points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
+'ESRI:102286'
+# Simple x/y plot of the points
+plot(st_geometry(points), pch=16, col="navy")
+plot(points$geometry, pch=16, col="navy")
+
+
 # Convert lat/long to simple features points
 points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
 'ESRI:102286'
