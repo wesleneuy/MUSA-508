@@ -4,13 +4,22 @@ author: "Veronica Rosado & Weslene Uy"
 date: "9/22/2021"
 output: html_document
 ---
+```{r Intro, message=FALSE, warning=FALSE, include=FALSE}
+
+#Assignment 1 - Transit Oriented Development TOD
+#Code worked in collaboration with Weslene UY
+#Weitzman School of Design
+
+#Brief motivation:
+#The purpose of this small TOD analysis is to see how demographic and economic changes near Boston's MBTA have changed from 2009 to 2019. Boston's subway system is among the oldest ones in the country, founded in 1894 by private entrerprises that later sold the entire transit system to the MBTA in 1942. With this study we looked at population, rent, income, race and education as indicators for determining development patterns near Boston's subway and train stations. 
+
+```
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-## Load Libraries
-install.packages("kable")
-install.packages("kableExtra")
+## Load Libraries  #Load packages if not installed
 library(tidyverse)
 library(tidycensus)
 library(sf)
@@ -30,6 +39,7 @@ When you click the **Knit** button a document will be generated that includes bo
 
 ```{r graphic themes, warning = FALSE}
 
+#Map theme
 mapTheme <- function(base_size = 12) {
   theme(
     text = element_text( color = "black"),
@@ -42,7 +52,7 @@ mapTheme <- function(base_size = 12) {
     axis.title.x = element_blank(),
     axis.title.y = element_blank(),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    panel.border = element_rect(colour = "black", fill=NA, size=1),
     strip.text.x = element_text(size = 14))
 }
 
@@ -56,7 +66,7 @@ plotTheme <- function(base_size = 12) {
     panel.background = element_blank(),
     panel.grid.major = element_line("grey80", size = 0.1),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    panel.border = element_rect(colour = "grey80", fill=NA, size=1),
     strip.background = element_rect(fill = "grey80", color = "white"),
     strip.text = element_text(size=12),
     axis.title = element_text(size=12),
@@ -79,10 +89,12 @@ qBr <- function(df, variable, rnd) {
     as.character(quantile(round(df[[variable]],0),
                           c(.01,.2,.4,.6,.8), na.rm=T))
   } else if (rnd == FALSE | rnd == F) {
-    as.character(formatC(quantile(df[[variable]]), digits = 3),
+    as.character(formatC(quantile(df[[variable]]), digits = 4),
                  c(.01,.2,.4,.6,.8), na.rm=T)
   }
 }
+
+
 
 q5 <- function(variable) {as.factor(ntile(variable, 5))}
 
@@ -137,25 +149,20 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval)
 }
 
 # Load hexadecimal color palette
+palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
+```
 
-palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
 
+
+```{r Census Data and Data Wrangling, warning = FALSE}
 # Load census API key
 census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
 
 #Load list of variables
-
 acs_variable_list.2009 <- load_variables(2009, 
                                          "acs5")
 acs_variable_list.2019 <- load_variables(2019, 
                                          "acs5")
-
-#Year 2009 tracts - B15002_015 Male Bachelor's Degree; B15002_032 Female Bachelor's Degree
-
-#need to edit state and county geoid for Boston, MA. Also need to add one more variable - we use the population variable to get the percentages
-
-#new variables to add <- B03003_003 (HispanicPopulation) or B02001_002 (WhitePopulation) #Boston is pretty white but it would be good to see how latinos have moved around the area.
-            
 
 #Year 2009 tracts
 tracts09 <-  
@@ -181,6 +188,7 @@ tracts09 <-
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
          year = "2009") %>%
   dplyr::select(-HispanicPop,-FemaleBachelors,-MaleBachelors)
+
 
 #Year 2019 Tracts
 tracts19 <-  
@@ -208,33 +216,36 @@ tracts19 <-
   dplyr::select(-HispanicPop,-FemaleBachelors,-MaleBachelors)
 
 
-#Combine 2009 and 2019 data
+#Combined 2009 and 2019 data
 allTracts <- rbind(tracts2009,tracts2019)
 
+#Question 1
 #----TRANSIT Data: MBTA Boston-----
 
-#Wrangling transit open data - Stations are MBTA_NODE; Routes are MBTA_ARC ---
+#Wrangling transit open data - Stations are MBTA_NODE; Routes are MBTA_ARC. In this case we will only use MBTA_NODE ---
 MBTAStops <- 
     st_read("C:/Users/veron/Documents/CPLNPennDesign/590-Musa/mbta_rapid_transit/MBTA_NODE.shp") %>%
       select(STATION, LINE) %>%
   st_transform(st_crs(tracts2019))
 
 
-#Visualizing this
 
+#Visualizion of this
 ggplot() + 
-  geom_sf(data=st_union(tracts2019)) +
+  geom_sf(data=tracts2019) +
+  geom_sf(data=MBTALines, aes(colour = LINE)) +
   geom_sf(data=MBTAStops, 
-          aes(colour = Line), 
-          show.legend = "point", size= 5) +
-  scale_colour_manual(values = c("orange","blue")) +
+          aes(colour = LINE), 
+          show.legend = "point", size= 1) +
+  scale_colour_manual(values = c("blue","skyblue","blue","green","green","green","orange","orangered","red","grey")) +
   labs(title="MBTA Stops", 
        subtitle="Boston, MA", 
        caption="Figure 1") +
   mapTheme()
-
+```
+```{r Data wrangling, warning = FALSE}
 # --- MBTA Stops Buffers ----
-
+#A buffer of 0.5 mile for each MBTA stop
 MBTABuffers <- 
   rbind(
     st_buffer(MBTAStops, 804.6) %>%
@@ -247,80 +258,22 @@ MBTABuffers <-
 ggplot() +
   geom_sf(data=MBTABuffers) +
   geom_sf(data=MBTABuffers, show.legend = "point") +
-  facet_wrap(~Legend) + 
-  labs(caption = "Figure 2") +
+  facet_wrap(~Legend) +
+  geom_sf(data=MBTAStops, 
+          aes(colour = LINE), 
+          show.legend = "point", size= 1) +
+  scale_colour_manual(values = c("blue","skyblue","blue","green","green","green","orange","orangered","red","darkgrey")) +
+  labs(title="MBTA Stops") +
   mapTheme()
 
-# --- MBTA Multiple Buffer Rings ----
-Multibuffer_union=st_union(MBTABuffers)%>%
-  st_sf()
+```
 
-MRBuffer <-
-  st_join(
-    st_centroid(dplyr::select(allTracts, GEOID, year)),
-    multipleRingBuffer(Multibuffer_union,10000,804.672)) %>%
-  st_drop_geometry() %>%
-  left_join(dplyr::select(allTracts, GEOID, MedRent, year),
-            by=c("GEOID"="GEOID", "year"="year")) %>%
-  st_sf() %>%
-  replace_na(list(distance = 0))%>% 
-  mutate(distance = distance+804.672)
 
-Bostonbdry <- st_union(tracts09) %>%
-  st_sf()
+```{r TOD Indicatators, warning = FALSE}
+#Question 2: Spatial Operations - TOD Indicators - Small Multiple Plots
 
-#MultipleRingBuffer Plot
-ggplot() +
-  geom_sf(data=multipleRingBuffer(Multibuffer_union,10000,804.672))+
-  geom_sf(data=Bostonbdry,fill = "transparent",color="black",size=0.5)+
-  geom_sf(data = MBTAStops,size=0.5)+
-  labs(
-    title = "Half Mile Buffers",
-    subtitle="Boston Boundary overlayed"
-  ) +
-  mapTheme()+  theme(plot.title = element_text(size=22))
 
-#Distance to MBTAStops
-ggplot(MRBuffer)+
-  geom_sf(color=NA,aes(fill = q5(distance))) +
-  geom_sf(data=allTracts.group,fill = "transparent",color=NA)+
-  geom_sf(data = MBTAStops,size=0.5)+
-  geom_sf(data = Multibuffer_union, fill = "transparent", color = "red",size=0.5)+
-  scale_fill_manual(values = palette5,
-                    labels = qBr(MRBuffer, "distance"),
-                    name = "Distance\n(Quintile Breaks)") +
-  labs(
-    title = "Distance to TOD area 2009-2019",
-    subtitle = "Buffer is areas within 0.5 mile from MBTA Stops"
-    ) +
-  mapTheme() + 
-  theme(plot.title = element_text(size=20))
-  
-#Mean Rent as a function of distance to MBTA Stops  
-  
-MeanRent=MRBuffer%>%
-  group_by(year,distance)%>%
-  summarise(avgRent=mean(MedRent,na.rm=TRUE))
-
-#Plot
-ggplot(MeanRent, aes(y=avgRent, x=distance)) + 
-  geom_line(aes(group=year, color=year), size = 1.5) + 
-  geom_point(aes(color=year), size = 4,shape = 21, fill = "white") +
-  scale_color_manual(values = c("#2166ac", "#ef8a62"),name="Year")+
-  labs(
-    title = "Rent as a function of Distance to MBTA Stops", 
-    caption = "
-Line plot 1
-
-Insert description of line graph here"
-    ) +
-  plotTheme() + theme(plot.title = element_text(size=18),legend.position="right")
-
-# ---- Spatial operations ----
-
-# Three types. SelectByCentroids if the best option for this analysis
-
-# Create an sf object with ONLY the unioned buffer
+# sf object with ONLY the unioned buffer
 buffer <- filter(MBTABuffers, Legend=="Unioned Buffer")
 
 # Clip 
@@ -345,7 +298,7 @@ selectCentroids <-
   dplyr::select(TotalPop) %>%
   mutate(Selection_Type = "Select by Centroids")
 
-# ---- Visualizing This ----
+# ---- Visualizing The Selections ----
 
 myData  <- rbind(selectCentroids, clip) %>%
   rbind(., selection)
@@ -360,7 +313,10 @@ ggplot(myData)+
   facet_wrap(~Selection_Type)+
   mapTheme() + 
   theme(plot.title = element_text(size=20))
+```
 
+
+```{r TOD Indicatators pt.2, warning = FALSE}
 # --- Tracts grouped by Year ----
 allTracts.group <- 
   rbind(
@@ -379,31 +335,15 @@ allTracts.group <-
 
 
 ggplot(allTracts.group)+
-  geom_sf(data = st_union(tracts09))+
   geom_sf(aes(fill = TOD)) +
+  scale_fill_manual(values = c("#ffcdb2","#e5989b"))+
   labs(title = "Time/Space Groups") +
   facet_wrap(~year)+
   mapTheme() + 
   theme(plot.title = element_text(size=22))
+```
 
-# --- Four Small Multiple Visualizations ----
-# MedRent 2009-2019
-ggplot(allTracts.group)+
-  geom_sf(data = st_union(tracts09))+
-  geom_sf(aes(fill = q5(MedHHInc))) +
-  geom_sf(data = buffer, fill = "transparent", color = "red")+
-  scale_fill_manual(values = palette5,
-                    labels = qBr(allTracts.group, "MedHHIncome"),
-                    name = "Rent\n(Quintile Breaks)") +
-  labs(title = "Median Rent 2009-2019", subtitle = "Real Dollars") +
-  facet_wrap(~year)+
-  mapTheme() + 
-  theme(plot.title = element_text(size=22))
-
-#Med HH Income 2009-2019
-
-
-
+```{r TOD Indicatators pt.2, warning = FALSE}
 
 
 # --- TOD Indicator Tables ----
@@ -419,22 +359,267 @@ allTracts.Summary <-
 kable(allTracts.Summary) %>%
   kable_styling() %>%
   footnote(general_title = "\n",
-           general = "Table 2.2")
+           general = "Table 1")
+
+allTracts.Summary %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable() %>%
+    kable_styling() %>%
+    footnote(general_title = "\n",
+             general = "Table 2")
+
+```
 
 
+```{r TOD Indicators Plots, warning = FALSE}
 
+#TOD Indicator Bar Plot
+allTracts.Summary %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    facet_wrap(~Variable, scales = "free", ncol=5) +
+    scale_fill_manual(values = c("#ffcdb2","#e5989b")) +
+    labs(title = "Indicator differences across time and space") + theme(legend.position="bottom")
+
+```
+
+```{r TOD Indicatators Plots}
+
+#Small Multiple 1
+#Population
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(TotalPop))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=0.5)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "TotalPop"),
+                    name = "Population\n(Quintile Breaks)") +
+  labs(
+    title = "Population 2009-2019",subtitle = "Buffer represents areas within 0.5mi away from MBTA Stops", caption = "The maps show population changes within TOD and non-TOD areas from 2009 to 2019.") +
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+```
+
+```{r TOD Indicatators Plots, warning = FALSE}
+#Small Multiple 2
+#median rent
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(MedRent))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=0.5)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "MedRent"),
+                    name = "MedRent\n(Quintile Breaks)") +
+  labs(
+    title = "Median Rent 2009-2019", caption = "Median Rent within TOD areas has significantly increased from 2009 to 2019.")+
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+```
+
+```{r}
+#Small Multiple 3
+#Hispanic
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(pctHispanic))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=0.5)+
+  scale_fill_manual(values = palette5,
+                    labels = round(allTracts$pctHispanic, digits = 4),
+                    name = "pctHispanic\n(Quintile Breaks)") +
+  labs(
+    title = "Percent Hispanic 2009-2019", caption = "The percent of Hispanic population within certain TOD areas has slightly decreased from 2009 to 2019.")+
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+```
+
+
+```{r}
+#Small Multiple 4
+#Bachelors
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(pctBachelors))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=0.5)+
+  scale_fill_manual(values = palette5,
+                    labels = round(allTracts$pctBachelors, digits = 2),
+                    name = "pctBachelors\n(Quintile Breaks)") +
+  labs(
+    title = "Percent Bachelors 2009-2019")+
+   # subtitle = 
+   # caption = 
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+```
+
+```{r}
+#Small Multiple Map 5
+#Income
+ggplot(allTracts)+
+  geom_sf(color=NA,aes(fill = q5(MedHHInc))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red",size=0.5)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts, "MedHHInc"),
+                    name = "MedHHInc\n(Quintile Breaks)") +
+  labs(
+    title = "Median Household Income 2009-2019", caption = "Median Household Income has significantly increased within TOD areas from 2009 to 2019.")+
+   # subtitle = 
+   # caption = 
+  facet_wrap(~year)+
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+
+```
+
+
+```{r Graduated Symbol Maps}
+
+#Graduated symbol maps of population 
+selectCentroids <-
+  st_centroid(allTracts)[buffer,] %>%
+  st_sf()
+
+
+ggplot() +
+  geom_sf(data=allTracts,color="gray70")+
+  geom_sf(data=buffer,fill = "transparent",color="gray20",size=0.5)+
+  geom_sf(data = selectCentroids,size=0.1)+
+  geom_sf(data = selectCentroids,
+          pch=21,
+          aes(size = TotalPop),
+          fill = alpha("#ef8a62", 0.6),
+          color="darkred")+
+  facet_wrap(~year)+
+  scale_size(range = c(0,7))+
+  scale_fill_manual(labels = qBr(selectCentroids, "TotalPop"),
+          name = "Popultaion\n(Quintile Breaks)") +
+  labs(
+    title = "Population within TOD Area between 2009-2019",
+    subtitle = "Black dots represent MBTA stations",
+    caption= "In 2019, population count within TOD seem to have increased but the overall distribution may have stayed similar to that of 2009"
+    ) +
+  mapTheme()+
+  theme(plot.title = element_text(size=22))
+```
+
+```{r}
+#Graduated symbol maps of rent 
+ggplot() +
+  geom_sf(data=allTracts,color="gray70")+
+  geom_sf(data=buffer,fill = "transparent",color="gray20",size=0.5)+
+  geom_sf(data = selectCentroids,size=0.1)+
+  geom_sf(data = selectCentroids,
+          pch=21,
+          aes(size = MedRent),
+          fill = alpha("#b5838d", 0.3),
+          color="#b5838d")+
+  facet_wrap(~year)+
+  scale_size(range = c(0,7))+
+  scale_fill_manual(labels = qBr(selectCentroids, "MedRent"),
+                    name = "MedRent\n(Quintile Breaks)") +
+  labs(
+    title = "MedRent within TOD Area between 2009-2019",
+    subtitle = "Black dots represent MBTA stations",
+    caption= "Median Rent within TOD areas shows significant inflation from 2009 to 2019. Specifically in the Allston/Brighton, Jamaica Plan, Fenway/Kenmore, BackBay/Beacon Hill and Central.",
+  )+
+  mapTheme()+theme(plot.title = element_text(size=22))
+
+```
+
+
+```{r Data wran, warning = FALSE}
+
+# --- MBTA Multiple Buffer Rings ----
+Multibuffer_union=st_union(MBTABuffers)%>%
+  st_sf()
+
+MRBuffer <-
+  st_join(
+    st_centroid(dplyr::select(allTracts, GEOID, year)),
+    multipleRingBuffer(Multibuffer_union,10000,804.672)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedRent, year),
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  replace_na(list(distance = 0))%>% 
+  mutate(distance = distance+804.672)
+
+Bostonbdry <- st_union(tracts09) %>%
+  st_sf()
+
+#MultipleRingBuffer Plot
+ggplot() +
+  geom_sf(data=multipleRingBuffer(Multibuffer_union,10000,804.672),fill="transparent")+
+  geom_sf(data=Bostonbdry,fill = "transparent",color="#b5838d",size=0.5)+
+  geom_sf(data = MBTAStops,color = "darkred", size=0.75)+
+  labs(
+    title = "Half Mile Buffers",
+    subtitle="Boston Boundary overlayed"
+  ) +
+  mapTheme()+  theme(plot.title = element_text(size=22))
+```
+
+
+```{r}
+
+#Distance to MBTAStops
+ggplot(MRBuffer)+
+  geom_sf(color=NA,aes(fill = q5(distance))) +
+  geom_sf(data=allTracts.group,fill = "transparent",color=NA)+
+  geom_sf(data = MBTAStops,size=0.75, color = "darkred")+
+  geom_sf(data = Multibuffer_union, fill = "transparent", color = "darkred",size=0.75)+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(MRBuffer, "distance"),
+                    name = "Distance\n(Quintile Breaks)") +
+  labs(
+    title = "Distance to TOD area 2009-2019",
+    subtitle = "Buffer is areas within 0.5 mile from MBTA Stops"
+    ) +
+  mapTheme() + 
+  theme(plot.title = element_text(size=20))
+```
+
+
+```{r}
+#Question 6: Geom_line plot
+#Mean Rent as a function of distance to MBTA Stops  
+MeanRent=MRBuffer%>%
+  group_by(year,distance)%>%
+  summarise(avgRent=mean(MedRent,na.rm=TRUE))
+
+#Plot for this
+ggplot(MeanRent, aes(y=avgRent, x=distance)) + 
+  geom_line(aes(group=year, color=year), size = 1.5) + 
+  geom_point(aes(color=year), size = 4,shape = 21, fill = "white") +
+  scale_color_manual(values = c("#ffb4a2", "#6d6875"),name="Year")+
+  labs(
+    title = "Rent as a function of Distance to MBTA Stops", 
+    caption = "
+Line plot:
+
+Rent distribution relative to MBTA Stops proximity has stayed about the same as in 2009. 
+Rents overall in 2019 have increased, even in places up to 5k meters away."
+    ) +
+  plotTheme() + theme(plot.title = element_text(size=18),legend.position="right")
+
+```
+
+```{r}
 #Crime data
 # Read the CSV file with latitudes and longitudes
 install.packages("crimedata") #installed if not
 library(crimedata)
 
-
 crime_2019 <- get_crime_data(
   years = 2019, 
-  cities = NULL, 
+  cities = "Boston", 
   type = "core",
-  cache = FALSE,
-  output = "sf") %>%
+  output = "sf") 
+
   filter(offense_type == "assault offenses")
 
 glimpse(crime_2019)
