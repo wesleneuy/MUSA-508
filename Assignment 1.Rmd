@@ -1,15 +1,16 @@
+rm(list=ls())
+
 ---
 title: "MUSA 508 Assignment 1"
 author: "Veronica Rosado & Weslene Uy"
 date: "9/22/2021"
 output: html_document
 ---
-
+The Massachusetts Bay Transportation Authority operates Boston's public transportation system
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 ## Load Libraries
-install.packages("crimedata")
 library(crimedata)
 library(tidyverse)
 library(tidycensus)
@@ -73,8 +74,8 @@ plotTheme <- function(base_size = 12) {
 
 qBr <- function(df, variable, rnd) {
   if (missing(rnd)) {
-    as.character(quantile(round(df[[variable]],0),
-                          c(.01,.2,.4,.6,.8), na.rm=T))
+    as.character(quantile(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T)
   } else if (rnd == FALSE | rnd == F) {
     as.character(formatC(quantile(df[[variable]]), digits = 3),
                  c(.01,.2,.4,.6,.8), na.rm=T)
@@ -127,20 +128,6 @@ tracts09 <-
   
   
 #Year 2019 Tracts
-tracts2019 <- 
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B06009_005E", "B03003_003E"),
-  year=2019, state=25, county=025, geometry=T) %>% 
-  st_transform('ESRI:102286')%>%
-  rename(TotalPop = B25026_001E, 
-         MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         Bachelors = B06009_005E) %>%
-  select(-NAME, -starts_with("B")) %>%
-  mutate(pctBachelors = ifelse(TotalPop > 0, ((Bachelors) / TotalPop),0),
-         pctHispanic = ifelse(TotalPop > 0, Hispanic / TotalPop,0),
-         year = "2019") %>%
-  select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
-
 tracts19 <-  
   get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B25058_001E","B15002_015E","B15002_032E","B03003_003E"),
           year=2019, state=25, county=025, geometry=T) %>% 
@@ -170,7 +157,12 @@ allTracts <- rbind(tracts09,tracts19)
 df <- st_union(tracts19) %>% st_sf()
 
 #Wrangling transit open data 
-df <- ggplot() + 
+MBTA <- st_read("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/mbta_rapid_transit/MBTA_NODE.shp")%>%
+select(STATION, LINE)%>%
+st_transform(st_crs(tracts19)) 
+
+#Visualizing this
+ggplot() + 
   geom_sf(data=st_union(tracts19)) +
   geom_sf(data=MBTA, 
           aes(colour = LINE), 
@@ -179,13 +171,6 @@ df <- ggplot() +
   labs(title="MBTA Stops", 
        subtitle="Boston, MA", 
        caption="Figure 1") 
-
-MBTA <- st_read("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/mbta_rapid_transit/MBTA_NODE.shp")%>%
-select(STATION, LINE)%>%
-st_transform(st_crs(tracts19)) 
-
-#Visualizing this
-
  
 
 #Creating buffers
@@ -384,20 +369,30 @@ ggplot() +
 
 #Crime data
 # Read the CSV file with latitudes and longitudes
-library(crimedata)
+
 
 crime_2019 <- get_crime_data(
   years = 2019, 
   cities = c("Boston"), 
   type = "core") %>%
-  filter(offense_type == "assault offenses")
+  filter(offense_group == "assault offenses")
 
-crime_2019 <- crime_2019%>%
+crime_2016 <- get_crime_data(
+  years = 2016, 
+  cities = c("Boston"), 
+  type = "core") %>%
+  filter(offense_group == "assault offenses")
+
+crime_1619 <- rbind(crime_2016, crime_2019)%>%
   st_as_sf(coords = c("longitude","latitude"), crs=st_crs(4326),agr="constant") %>%
   st_transform(st_crs(allTracts))
 
-tracts_crime <- st_join(allTracts, crime_2019, join = st_intersects) 
-crime_count <- count(as_tibble(tracts_crime), GEOID)
+
+tracts_crime <- st_join(allTracts, crime_1619, join = st_intersects)
+
+crime_count <- count(as_tibble(tracts_crime), GEOID) 
+#crime_count <- group_by()%>%summarize()
+
 tracts_crimecount <- left_join(crime_count, tracts_crime) %>%
   rename("Crimecount" = n) %>%
   st_as_sf()
@@ -412,21 +407,18 @@ ggplot(tracts_crimecount[tracts19,])+
   scale_fill_manual(values = palette5,
                     labels = qBr(tracts_crimecount, "Crimecount"),
                     name = "Crime count\n(Quintile Breaks)") +
-  labs(title = "Crime count 2009-2017", subtitle = "The red border denotes areas close to rail stations") +
-  facet_wrap(~year)+
-  mapTheme() + 
-  theme(plot.title = element_text(size=22))
+  labs(title = "Crime count 2016-2019", subtitle = "") 
 
 #crime data using dataset downloaded from Boston Open Data
-crimedata = read.csv("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/2019 Crime Incidents.csv", stringsAsFactors = FALSE)
+crimedata2019 = read.csv("C:/Users/wesleneuy/Desktop/CPLN/Fall 2021/New folder/2019 Crime Incidents.csv", stringsAsFactors = FALSE)%>%filter(OFFENSE_DESCRIPTION == "ASSAULT - SIMPLE")
 
 # Convert lat/long to simple features points
-points = st_as_sf(crimedata, coords = c("Lat", "Long"), crs = 4326)
-
-'ESRI:102286'
+crimedata2019.sf = st_as_sf(crimedata2019, coords = c("Lat", "Long"), crs = 4326, agr= "constant")%>%st_transform(st_crs(allTracts))
+#reproject to 'ESRI:102286'
+  
 # Simple x/y plot of the points
 plot(st_geometry(points), pch=16, col="navy")
-plot(points$geometry, pch=16, col="navy")
+plot(crimedata2019.sf$geometry, pch=16, col="navy")
 
 ```
 
