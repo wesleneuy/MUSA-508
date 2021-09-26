@@ -343,7 +343,7 @@ ggplot(allTracts.group)+
   theme(plot.title = element_text(size=22))
 ```
 
-```{r TOD Indicatators pt.2, warning = FALSE}
+```{r TOD Indicatators pt.3, warning = FALSE}
 
 
 # --- TOD Indicator Tables ----
@@ -374,7 +374,7 @@ allTracts.Summary %>%
 ```
 
 
-```{r TOD Indicators Plots, warning = FALSE}
+```{r TOD Indicators Plots pt.4, warning = FALSE}
 
 #TOD Indicator Bar Plot
 allTracts.Summary %>%
@@ -387,7 +387,7 @@ allTracts.Summary %>%
 
 ```
 
-```{r TOD Indicatators Plots}
+```{r TOD Indicatators Plots Pt.5}
 
 #Small Multiple 1
 #Population
@@ -405,7 +405,7 @@ ggplot(allTracts)+
 
 ```
 
-```{r TOD Indicatators Plots, warning = FALSE}
+```{r TOD Indicatators Plots pt.6, warning = FALSE}
 #Small Multiple 2
 #median rent
 ggplot(allTracts)+
@@ -531,7 +531,7 @@ ggplot() +
 ```
 
 
-```{r Data wran, warning = FALSE}
+```{r DataWrangling, warning = FALSE}
 
 # --- MBTA Multiple Buffer Rings ----
 Multibuffer_union=st_union(MBTABuffers)%>%
@@ -608,7 +608,7 @@ Rents overall in 2019 have increased, even in places up to 5k meters away."
 
 ```
 
-```{r}
+```{r Crime data}
 #Crime data
 # Read the CSV file with latitudes and longitudes
 install.packages("crimedata") #installed if not
@@ -706,7 +706,7 @@ Assaults.Summary <-
   unite(year.TOD, year, TOD, sep = ": ", remove = T) 
 
 ```
-```{r}
+```{r Conclusions}
 #Policy-relevant conclusions
 
 
