@@ -1,10 +1,10 @@
 ---
 title: "MUSA 508 Assignment 1: TOD Analysis in Boston"
-author: "Veronica Rosado & Weslene Uy"
+author: "Veronica Rosado (in collab with Weslene Uy)"
 date: "9/22/2021"
 output: html_document
 ---
-```{r Intro, message=FALSE, warning=FALSE, include=FALSE}
+```{r Intro, message=FALSE, warning=FALSE}
 
 #Assignment 1 - Transit Oriented Development TOD
 
@@ -12,13 +12,16 @@ output: html_document
 #The purpose of this small TOD analysis is to see how demographic and economic changes near Boston's MBTA have changed from 2009 to 2019. Boston's subway system is among the oldest ones in the country, founded in 1894 by private enterprises that later sold the entire transit system to the MBTA in 1942. With this study we looked at population, rent, income, race and education as indicators for determining development patterns near Boston's subway and train stations. 
 
 
-#knitr::include_graphics('C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/MBTA_map.png')
+knitr::include_graphics('C:/Users/veron/Documents/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/MBTA_map.png')
 ```
 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
 ## Load Libraries  #Load packages if not installed
 library(tidyverse)
 library(tidycensus)
@@ -28,16 +31,11 @@ library(kableExtra)
 
 options(scipen=999) 
 options(tigris_class = "sf")
-
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r graphic themes, warning = FALSE}
+```{r graphic themes, echo=TRUE, message=FALSE, warning=FALSE}
 
 #Map theme
 mapTheme <- function(base_size = 12) {
@@ -80,7 +78,7 @@ plotTheme <- function(base_size = 12) {
 }
 ```
 
-```{r functions, warning = FALSE}
+```{r functions, echo=TRUE, message=FALSE, warning=FALSE}
 
 # Load Quantile break functions
 qBr <- function(df, variable, rnd) {
@@ -153,7 +151,9 @@ palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
 
 
 
-```{r Census Data and Data Wrangling, warning = FALSE}
+```{r Census Data and Data Wrangling, echo=TRUE, message=FALSE, warning=FALSE}
+#Loading Census Data
+
 # Load census API key
 census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
 
@@ -245,7 +245,7 @@ ggplot() +
        caption="Figure 1") +
   mapTheme()
 ```
-```{r Data wrangling, warning = FALSE}
+```{r Data wrangling, echo=TRUE, message=FALSE, warning=FALSE}
 # --- MBTA Stops Buffers ----
 #A buffer of 0.5 mile for each MBTA stop
 MBTABuffers <- 
@@ -271,7 +271,7 @@ ggplot() +
 ```
 
 
-```{r TOD Indicatators, warning = FALSE}
+```{r TOD Indicatators, echo=TRUE, message=FALSE, warning=FALSE}
 #Question 2: Spatial Operations - TOD Indicators - Small Multiple Plots
 
 
@@ -318,7 +318,9 @@ ggplot(myData)+
 ```
 
 
-```{r TOD Indicatators pt.2, warning = FALSE}
+```{r TOD Indicatators pt.2, echo=TRUE, message=FALSE, warning=FALSE}
+#Time-Space Groups (TOD vs non-TOD)
+
 # --- Tracts grouped by Year ----
 allTracts.group <- 
   rbind(
@@ -345,8 +347,8 @@ ggplot(allTracts.group)+
   theme(plot.title = element_text(size=22))
 ```
 
-```{r TOD Indicatators pt.3, warning = FALSE}
-
+```{r TOD Indicatators pt.3, echo=TRUE, message=FALSE, warning=FALSE}
+#A look into the data in table format
 
 # --- TOD Indicator Tables ----
 
@@ -377,7 +379,7 @@ allTracts.Summary %>%
 ```
 
 
-```{r TOD Indicators Plots pt.4, warning = FALSE}
+```{r TOD Indicators Plots pt.4, echo=TRUE, message=FALSE, warning=FALSE}
 
 #TOD Indicator Bar Plot
 allTracts.Summary %>%
@@ -390,9 +392,9 @@ allTracts.Summary %>%
 
 ```
 
-```{r TOD Indicatators Plots Pt.5}
+```{r TOD Indicatators Plots Pt.5, echo=TRUE}
 
-#Small Multiple 1
+#Small Multiple Plot 1
 #Population
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(TotalPop))) +
@@ -408,8 +410,8 @@ ggplot(allTracts)+
 
 ```
 
-```{r TOD Indicatators Plots pt.6, warning = FALSE}
-#Small Multiple 2
+```{r TOD Indicatators Plots pt.6, echo=TRUE, message=FALSE, warning=FALSE}
+#Small Multiple Plot 2
 #median rent
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(MedRent))) +
@@ -424,8 +426,8 @@ ggplot(allTracts)+
   theme(plot.title = element_text(size=22))
 ```
 
-```{r}
-#Small Multiple 3
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Small Multiple Plot 3
 #Hispanic
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(pctHispanic))) +
@@ -441,8 +443,8 @@ ggplot(allTracts)+
 ```
 
 
-```{r}
-#Small Multiple 4
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Small Multiple Plot 4
 #Bachelors
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(pctBachelors))) +
@@ -459,8 +461,8 @@ ggplot(allTracts)+
   theme(plot.title = element_text(size=22))
 ```
 
-```{r}
-#Small Multiple Map 5
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Small Multiple Plot 5
 #Income
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(MedHHInc))) +
@@ -477,9 +479,9 @@ ggplot(allTracts)+
 ```
 
 
-```{r Graduated Symbol Maps}
-
+```{r Graduated Symbol Maps, echo=TRUE}
 #Graduated symbol maps of population 
+
 selectCentroids <-
   st_centroid(allTracts)[buffer,] %>%
   st_sf()
@@ -507,8 +509,9 @@ ggplot() +
   theme(plot.title = element_text(size=22))
 ```
 
-```{r warning=FALSE}
+```{r echo=TRUE, warning=FALSE}
 #Graduated symbol maps of rent 
+
 ggplot() +
   geom_sf(data=allTracts,color="gray70")+
   geom_sf(data=buffer,fill = "transparent",color="gray20",size=0.5)+
@@ -523,7 +526,7 @@ ggplot() +
   scale_fill_manual(labels = qBr(selectCentroids, "MedRent"),
                     name = "MedRent\n(Quintile Breaks)") +
   labs(
-    title = "MedRent within TOD Area between 2009-2019",
+    title = "Rent within TOD Area between 2009-2019",
     subtitle = "Black dots represent MBTA stations",
     caption= "Median Rent within TOD areas shows significant inflation from 2009 to 2019. Specifically in the Allston/Brighton, Jamaica Plan, Fenway/Kenmore, BackBay/Beacon Hill and Central.",
   )+
@@ -532,9 +535,10 @@ ggplot() +
 ```
 
 
-```{r DataWrangling, warning = FALSE}
+```{r DataWrangling, echo=TRUE, warning=FALSE}
 
 # --- MBTA Multiple Buffer Rings ----
+
 Multibuffer_union=st_union(MBTABuffers)%>%
   st_sf()
 
@@ -565,9 +569,10 @@ ggplot() +
 ```
 
 
-```{r warning=FALSE}
+```{r echo=TRUE, warning=FALSE}
 
 #Distance to MBTAStops
+
 ggplot(MRBuffer)+
   geom_sf(color=NA,aes(fill = q5(distance))) +
   geom_sf(data=allTracts.group,fill = "transparent",color=NA)+
@@ -585,8 +590,9 @@ ggplot(MRBuffer)+
 ```
 
 
-```{r echo=FALSE, warning=FALSE}
+```{r echo=TRUE, warning=FALSE}
 #Question 6: Geom_line plot
+
 #Mean Rent as a function of distance to MBTA Stops  
 MeanRent=MRBuffer%>%
   group_by(year,distance)%>%
@@ -609,13 +615,14 @@ Rents overall in 2019 have increased, even in places up to 5k meters away."
 
 ```
 
-```{r Crime data, echo=FALSE, warning=FALSE}
+```{r Crime data, echo=TRUE, warning=FALSE}
 #Crime data
+
 #Read the CSV file with latitudes and longitudes
 #installed if not
 library(crimedata)
 
-#Data fr 2019
+#Data for 2019
 crime_2019 <- get_crime_data(
   years = 2019, 
   cities = "Boston", 
@@ -628,7 +635,7 @@ crime_2019 <- crime_2019 %>%
   st_transform(st_crs(allTracts))
 
 
-#Crime for 2016
+#Data for 2016
 crime_2016 <- get_crime_data(
   years = 2016, 
   cities = "Boston", 
@@ -667,8 +674,9 @@ ggplot(tracts_crimecount[tracts19,])+
   labs(title = "Crime count 2016-2019", subtitle = "") 
 ```
 
-```{r echo=FALSE, warning=FALSE}
+```{r echo=TRUE, warning=FALSE}
 #Crime and Median Rent
+
 ggplot(allTracts)+
   geom_sf(color=NA,aes(fill = q5(MedRent)))+
   geom_sf(data = crime_1619, color = "darkred",size=0.15,alpha=0.75)+
@@ -681,8 +689,9 @@ ggplot(allTracts)+
   labs(title = "Assaults overlapped with Median Rent 2016-2019", subtitle = "Red boundary represents TOD areas within 0.5 mile")
 ```
 
-```{r echo=FALSE, warning=FALSE}
+```{r echo=TRUE, warning=FALSE}
 #Crime and Rent Bar Plots
+
 Assaults.Summary <- 
   st_drop_geometry(tracts_crimecount) %>%
   group_by(year, TOD) %>%
@@ -705,7 +714,7 @@ Rent inflation within TOD areas might be a factor for crime decrease, but it is 
 theme(legend.position="right")
 ```
 
-```{r Conclusions, echo=FALSE, warning=FALSE}
+```{r Conclusions, echo=TRUE, warning=FALSE}
 
 #Policy-relevant conclusions
 
@@ -717,12 +726,4 @@ theme(legend.position="right")
 
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
-
-```{r test, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
