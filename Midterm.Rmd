@@ -1,0 +1,69 @@
+---
+title: "Midterm"
+author: "Me"
+date: "10/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot)
+library(kableExtra)
+library(jtools)     # for regression model plots
+library(ggstance) 
+```
+
+## R Markdown
+
+
+```{r cars}
+#How is the zestimate calculated? https://www.zillow.com/z/zestimate/
+muni <- 
+  st_read("~/GitHub/MUSA-508/Municipalities (1).geojson") %>%
+  st_transform('ESRI:102653')
+
+studentData <- 
+  st_read("~/GitHub/MUSA-508/studentData.geojson", crs = 'ESRI:102254') %>%
+  st_transform('ESRI:102653')
+
+  boulder.sf <- studentData %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
+  st_transform('ESRI:102653')
+
+#State Plane Colorado - ESRI:102653
+#Colorado North - ESRI:102253
+#Colorado Central - ESRI:102254
+#Boulder - SR-ORG:7992  
+  
+ggplot() +
+  geom_sf(data = nhoods, fill = "grey40") +
+  geom_sf(data = boulder.sf, aes(colour = q5(price)), 
+          show.legend = "point", size = .75) +
+  scale_colour_manual(values = palette5,
+                   labels=qBr(boulder,"Price"),
+                   name="Quintile\nBreaks") +
+  labs(title="Price, Boulder") +
+  mapTheme()
+
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
