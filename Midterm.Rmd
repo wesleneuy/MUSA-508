@@ -4,11 +4,18 @@ author: "Me"
 date: "10/8/2021"
 output: html_document
 ---
+```{r}
+
+#Midterm Project Brief
+
+```
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+#Libraries needed for this exercise
 library(tidyverse)
+library(tidycensus)
 library(sf)
 library(spdep)
 library(caret)
@@ -20,50 +27,298 @@ library(ggcorrplot)
 library(kableExtra)
 library(jtools)     # for regression model plots
 library(ggstance) 
+library(stargazer)
+
+# Functions and data directory
+root.dir = "https://raw.githubusercontent.com/veronicaUPenn22/Public-Policy-Analytics-Landing/master/DATA/"
+
+source("https://raw.githubusercontent.com/veronicaUPenn22/Public-Policy-Analytics-Landing/master/functions.r")
+
+# Color palette
+palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
+
 ```
 
-## R Markdown
+## Data Gathering Methods
+
+```{r}
+
+```
+
+
+## Boulder Data and Homes Data 
 
 
 ```{r cars}
-#How is the zestimate calculated? https://www.zillow.com/z/zestimate/
+
+# Load census API key
+census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
+
 muni <- 
-  st_read("~/GitHub/MUSA-508/Municipalities (1).geojson") %>%
+  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/Municipalities.geojson") %>%
   st_transform('ESRI:102653')
 
 studentData <- 
-  st_read("~/GitHub/MUSA-508/studentData.geojson", crs = 'ESRI:102254') %>%
+  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/studentData.geojson", crs = 'ESRI:102254') %>%
   st_transform('ESRI:102653')
 
-  boulder.sf <- studentData %>%
+boulderCounty <-
+  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/County_Boundary.geojson")%>%
+  st_transform('ESRI:102653')
+
+boulder.sf <- studentData %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
-  st_transform('ESRI:102653')
-
-roads <-
-  st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson") %>%
   st_transform('ESRI:102653') %>%
-  filter(SPECIFIC_CATEGORY == "State", "Municipal Primary")
-
-glimpse(roads)
+  mutate(TotalBathrooms = nbrThreeQtrBaths + nbrFullBaths + nbrHalfBaths) %>%
+  rename(Size = TotalFinishedSF, 
+         TotalBedrooms = nbrBedRoom, 
+         GarageSize = carStorageSF)
   
+
+## Nearest Neighbor Feature (function)
+st_c <- st_coordinates
+
+
 #State Plane Colorado - ESRI:102653
 #Colorado North - ESRI:102253
 #Colorado Central - ESRI:102254
 #Boulder - SR-ORG:7992  
-  
+
+```
+
+
+## Boulder Open Spaces and Roads
+
+```{r Open and Roads, echo=FALSE}
+
+#Grab open space data set
+openspace <- 
+  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/County_Open_Space.geojson") %>%
+  filter(!is.na(PARK_GROUP)) %>%
+  st_transform('ESRI:102653')
+
+#Grab road data set
+roads.sf <-
+  st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson") %>%
+  st_transform('ESRI:102653') %>% 
+  dplyr::select(OBJECTID, STREET_NAME, SPECIFIC_CATEGORY, geometry) %>%
+  filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary"))
+
+
 ggplot() +
-  geom_sf(data = nhoods, fill = "grey40") +
+  geom_sf(data = boulderCounty, fill = "grey90") +
+  geom_sf(data = roads, aes(colour = SPECIFIC_CATEGORY)) +
+  labs(title="Boulder County Roads") +
+  mapTheme()
+
+```
+
+
+
+## Grab OSM Data 
+
+```{r OSM, echo=FALSE}
+install.packages("osmdata")
+library(osmdata)
+library(tigris)
+
+# Grab OSM data for Boulder County
+# Check out the wiki for the key/value pairs for different amenities - that lets you #figure out what you can call from OSM #https://wiki.openstreetmap.org/wiki/Category:Tag_descriptions_by_value
+
+# set bounding box - the maximum x-y extent you are interested in
+
+# Do some right-clicking in google maps to figure this out
+q0 <- opq(bbox = c(-75.3,39.85,-74.9,40.15)) #bounding box for philly
+q0 <- opq(bbox = c(-105.21,36.00,40.05,24.00)) #bounding box for boulder
+q0 <- opq(bbox = c("Boulder County")) #bounding box for boulder
+
+
+# Parks
+park <- add_osm_feature(opq = q0, key = 'leisure', value = "park") %>%
+  osmdata_sf(.)
+
+park.sf <- st_geometry(park$osm_polygons) %>%
+  st_as_sf(crs = 4326, agr = "constant") %>%
+  st_transform('ESRI:102286') %>%
+  cbind(., park$osm_polygons$name) %>%
+  rename(NAME = park.osm_polygons.name, geometry = "x")
+
+# Park Centroids
+parks_sf_cent <- st_centroid(park.sf)
+
+#Counts of parks per buffer of home price
+boulder.sf$parks.buffer =
+    st_buffer(boulder.sf, 804.672) %>% 
+    aggregate(mutate(parks_sf_cent, counter = 1),., sum) %>%
+    pull(counter)
+#Keeps giving me this error but not sure how to fix it...Error in st_geos_binop("intersects", #  x, y, sparse = sparse, prepared = prepared,  : 
+#  st_crs(x) == st_crs(y) is not TRUE
+
+
+# Transportation - Subway
+subway <- add_osm_feature(opq = q0, key = 'railway', value = "subway") %>%
+  osmdata_sf(.)
+subway.sf <- st_geometry(subway$osm_lines) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., subway$osm_lines$name) %>%
+  rename(NAME = subway.osm_lines.name) %>%
+  filter(NAME %in% c("Market-Frankford Line", "Broad Street Line"))
+
+# Amenities - Restaurant
+# Check in the attributes of `restaurant` and see what the different
+# variables and values are.
+# These data seem really shaky by the way
+restaurant <- add_osm_feature(opq = q0, key = 'amenity', value = "restaurant") %>%
+  osmdata_sf(.)
+restaurant.sf <- st_geometry(restaurant$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., restaurant$osm_points$amenity) %>%
+  rename(NAME = restaurant.osm_points.amenity)
+
+
+# Add the features for Boulder County
+# You can use this to clip things if it's necessary
+coCounties <- counties(state = 'CO', cb = FALSE)
+
+boulder <- coCounties %>%
+  filter(NAME == "Boulder") %>%
+  st_as_sf() %>%
+  st_transform(4326)
+
+
+#Visualize it
+ggplot() +
+  geom_sf(data = boulderCounty, fill = "grey90") +
+  geom_sf(data = parks_sf_cent, fill = NA, size = .5) +
+  labs(title="Parks in Boulder County") +
+  mapTheme()
+
+
+ggplot() +
+  geom_sf(data = boulderCounty, fill = "grey90") +
   geom_sf(data = boulder.sf, aes(colour = q5(price)), 
           show.legend = "point", size = .75) +
   scale_colour_manual(values = palette5,
-                   labels=qBr(boulder,"Price"),
+                   labels=qBr(boulder.sf,"Price"),
                    name="Quintile\nBreaks") +
-  labs(title="Price, Boulder") +
+  labs(title="Gross Price Boulder") +
   mapTheme()
+
+```
+
+## Summary Statistics: Physical variables, Amenities, and Spatial Process
+
+```{r}
+
+#Calculating distances to certain amenities
+
+#Data selection step
+
+#Distance to Parks
+
+#Distance to Restaurants
+
+#Distance to main roads
+
+#Distance to subway
+
+```
+
+## Home Buffer
+```{r}
+
+#A 5 mile buffer is created from Boulder homes 
+BoHomeBuffers <- 
+  rbind(
+    st_buffer(boulder.sf, 804.672) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(boulder.sf, 804.672)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+boulder.sf <- 
+  boulder.sf %>% 
+  mutate(BoHomeBuffers = BoHomeBuffers)
+            
+?st_join
+
+
+#HomePrice MRBuffer to measure distance from roads
+Unioned_buffer <- filter(BoHomeBuffers, Legend=="Unioned Buffer")
+
+MRBuffer_Boulder <-
+  st_join(
+    st_centroid(dplyr::select(boulder.sf, geometry)),
+    multipleRingBuffer(Unioned_buffer,10000,804.672)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(boulder.sf, geometry),
+            by=c("geometry"="geometry")) %>%
+  st_sf() %>%
+  replace_na(list(distance = 0))%>% 
+  mutate(distance = distance+804.672)
+
+
+#nearest neighbor function (can we use this to calculate nearest roads?)
+boulder.sf <-
+  boulder.sf %>% 
+    mutate(
+      road_nn1 = nn_function(st_c(boulder.sf), st_c(roads), 1),
+      road_nn2 = nn_function(st_c(boulder.sf), st_c(roads), 2),
+      road_nn3 = nn_function(st_c(boulder.sf), st_c(roads), 3),
+      road_nn4 = nn_function(st_c(boulder.sf), st_c(roads), 4),
+      road_nn5 = nn_function(st_c(boulder.sf), st_c(roads), 5))
+
+
+ggplot() +
+  geom_sf(data = boulderCounty, fill = "grey90") +
+  geom_sf(data=Unioned_buffer, fill = NA) +
+  geom_sf(data = boulder.sf, aes(colour = q5(price)), 
+          show.legend = "point", size = .75) +
+  #scale_colour_manual(values = palette5,
+                   #labels=qBr(boulder.sf,"Price"),
+                   #name="Quintile\nBreaks") +
+  labs(title="Home Price Buffer: 5 mile. Boulder County") +
+  mapTheme()
+
+```
+## Exploratory Analysis: Correlation Plots
+
+```{r}
+
+#Home Characteristics Corr
+st_drop_geometry(boulder.sf) %>% 
+  mutate(Age = 2015 - builtYear) %>%
+  dplyr::select(price, Size, Age, TotalBedrooms) %>%
+  filter(price <= 1000000, Age < 500) %>%
+  gather(Variable, Value, -price) %>% 
+   ggplot(aes(Value, price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
+```
+```{r}
+#Parks and Roads Correlation
+
+boulder.sf %>%
+  st_drop_geometry() %>%
+  mutate(Age = 2015 - YR_BUILT) %>%
+  dplyr::select(SalePrice, starts_with("crime_")) %>%
+  filter(SalePrice <= 1000000) %>%
+  gather(Variable, Value, -SalePrice) %>% 
+   ggplot(aes(Value, SalePrice)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, nrow = 1, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
 
 
 
 ```
+
 
 ## Including Plots
 
