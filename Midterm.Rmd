@@ -4,7 +4,7 @@ author: "Me"
 date: "10/8/2021"
 output: html_document
 ---
-
+#Load Packages
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -24,11 +24,10 @@ library(ggstance)
 
 ## R Markdown
 
-
 ```{r cars}
 #How is the zestimate calculated? https://www.zillow.com/z/zestimate/
 muni <- 
-  st_read("~/GitHub/MUSA-508/Municipalities (1).geojson") %>%
+  st_read("~/GitHub/MUSA-508/Municipalities.geojson") %>%
   st_transform('ESRI:102653')
 
 studentData <- 
@@ -39,10 +38,6 @@ studentData <-
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102653')
 
-#State Plane Colorado - ESRI:102653
-#Colorado North - ESRI:102253
-#Colorado Central - ESRI:102254
-#Boulder - SR-ORG:7992  
   
 ggplot() +
   geom_sf(data = nhoods, fill = "grey40") +
@@ -54,16 +49,95 @@ ggplot() +
   labs(title="Price, Boulder") +
   mapTheme()
 
+```
+## Grab OSM Data 
+```{r pressure, echo=FALSE}
+
+library(osmdata)
+library(tigris)
+
+# Grab OSM data for Boulder County
+# Check out the wiki for the key/value pairs for different amenities - that lets you #figure out what you can call from OSM #https://wiki.openstreetmap.org/wiki/Category:Tag_descriptions_by_value
+
+# set bounding box - the maximum x-y extent you are interested in
+# Do some right-clicking in google maps to figure this out
+
+q0 <- opq(bbox = c(-75.3,39.85,-74.9,40.15)) #bounding box for philly
+q0 <- opq(bbox = c(-105.21,36.00,40.05,24.00)) #bounding box for boulder
+q0 <- opq(bbox = c("Boulder County")) #bounding box for boulder
+
+# Parks
+
+park <- add_osm_feature(opq = q0, key = 'leisure', value = "park") %>%
+  osmdata_sf(.)
+
+park.sf <- st_geometry(park$osm_polygons) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., park$osm_polygons$name) %>%
+  rename(NAME = park.osm_polygons.name)
+
+# Transportation - Subway
+
+subway <- add_osm_feature(opq = q0, key = 'railway', value = "subway") %>%
+  osmdata_sf(.)
+
+subway.sf <- st_geometry(subway$osm_lines) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., subway$osm_lines$name) %>%
+  rename(NAME = subway.osm_lines.name) %>%
+  filter(NAME %in% c("Market-Frankford Line", "Broad Street Line"))
+
+# Amenities - Restaurant
+
+# Check in the attributes of `restaurant` and see what the different
+# variables and values are.
+
+# These data seem really shaky by the way
+
+restaurant <- add_osm_feature(opq = q0, key = 'amenity', value = "restaurant") %>%
+  osmdata_sf(.)
+
+restaurant.sf <- st_geometry(restaurant$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., restaurant$osm_points$amenity) %>%
+  rename(NAME = restaurant.osm_points.amenity)
+
+# Add the features for Boulder County
+# You can use this to clip things if it's necessary
+
+coCounties <- counties(state = 'CO', cb = FALSE)
+
+boulder <- coCounties %>%
+  filter(NAME == "Boulder") %>%
+  st_as_sf() %>%
+  st_transform(4326)
+
+# Map it
+
+ggplot()+
+  geom_sf(data = boulder, color = "black")+
+  scale_color_manual(values = c("orange", "blue"))+
+  geom_sf(data = park.sf, fill = "light green", color = "transparent")+
+  geom_sf(data = restaurant.sf, color = "red", size = 0.2, alpha = 0.2)
 
 
 ```
-
-## Including Plots
-
-You can also embed plots, for example:
 
 ```{r pressure, echo=FALSE}
-plot(pressure)
-```
+#Grab open space data set
+openspace <- 
+  st_read("~/GitHub/MUSA-508/County_Open_Space.geojson") %>%
+  filter(!is.na(PARK_GROUP)) %>%
+  st_transform('ESRI:102653')
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+#Grab road data set
+roads <-
+  st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson")%%
+  st_transform('ESRI:102653') %>%
+  filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary"))
+
+#Grab transit data set
+```
