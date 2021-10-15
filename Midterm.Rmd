@@ -207,6 +207,25 @@ ggplot() +
   mapTheme()
 
 ```
+## Census Data
+```{r message=FALSE, warning=FALSE}
+# Load census API key
+census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
+
+#Load list of variables
+acs_variable_list.2019 <- load_variables(2019, 
+                                         "acs5")
+
+#Variables to test from Census:
+#pctBachelor: B06009_005
+#WorkedFromHome: B99087_005
+#Age: B01002_001
+#
+
+
+```
+
+
 
 ## Summary Statistics: Physical variables, Amenities, and Spatial Process
 
