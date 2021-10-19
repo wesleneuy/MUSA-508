@@ -2,13 +2,33 @@
 title: "Midterm"
 author: "Me"
 date: "10/8/2021"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    theme: united
 ---
-```{r}
 
-#Midterm Project Brief
 
-```
+## Project Description
+
+This project is...
+
+The following libraries are needed in for this model:
+
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot)
+library(kableExtra)
+library(jtools) 
+library(ggstance) 
+library(stargazer)
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -39,15 +59,28 @@ palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
 
 ```
 
-## Data Gathering Methods
+### Data Gathering Methods
+
+For this project, we used the dfollowing data sets:
+
+| Dataset        | Description    | Open Data URL  | File Type | Location |
+| :------------- | :------------- | :------------- | :------------- | :------------- |
+| Boulder County Municipalities | Boundaries polygons | https://opendata-bouldercounty.hub.arcgis.com/datasets/bouldercounty::municipalities/about | geojson | MUSA-508/Midterm |
+| Boulder County Boundary | Boundary polygon | https://opendata-bouldercounty.hub.arcgis.com/datasets/county-boundary/explore?location=40.088157%2C-105.373097%2C11.58 | geojson | MUSA-508/Midterm |
+| Boulder County Open Spaces | Boundaries for parks and open spaces state and municipally owned | https://opendata-bouldercounty.hub.arcgis.com/datasets/county-open-space/explore?location=40.080100%2C-105.341850%2C11.48&showTable=true | geojson | MUSA-508/Midterm |
+| Roads | Boulder County main freeways and road network | https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson | geojson | "" |
+
+
+
+| Student Data | Homes data for Boulder County (2019-2021) | Provided by MUSA508 instructors | geojson | MUSA-508/Midterm |
+
 
 ```{r}
 
 ```
 
 
-## Boulder Data and Homes Data 
-
+### Boulder Data and Homes Data 
 
 ```{r cars}
 
@@ -113,19 +146,18 @@ ggplot() +
 
 ```
 
+### OSM Data for Boulder County
 
+Grab OSM data for Boulder County
+Check out the wiki for the key/value pairs for different amenities - that lets you #figure out what you can call from OSM #https://wiki.openstreetmap.org/wiki/Category:Tag_descriptions_by_value
 
-## Grab OSM Data 
+set bounding box - the maximum x-y extent you are interested in
 
 ```{r OSM, echo=FALSE}
 install.packages("osmdata")
 library(osmdata)
 library(tigris)
 
-# Grab OSM data for Boulder County
-# Check out the wiki for the key/value pairs for different amenities - that lets you #figure out what you can call from OSM #https://wiki.openstreetmap.org/wiki/Category:Tag_descriptions_by_value
-
-# set bounding box - the maximum x-y extent you are interested in
 
 # Do some right-clicking in google maps to figure this out
 q0 <- opq(bbox = c(-75.3,39.85,-74.9,40.15)) #bounding box for philly
@@ -177,6 +209,47 @@ restaurant.sf <- st_geometry(restaurant$osm_points) %>%
   cbind(., restaurant$osm_points$amenity) %>%
   rename(NAME = restaurant.osm_points.amenity)
 
+# Amenities - Hospitals + Clinics
+hospitals <- add_osm_feature(opq = q0, key = 'amenity', value = "hospital") %>%
+  osmdata_sf(.)
+hospitals.sf <- st_geometry(hospitals$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., hospitals$osm_points$amenity) %>%
+  rename(NAME = hospitals.osm_points.amenity) %>%
+  #mutate(NAME = is.na(NAME),"hospital")
+
+
+clinics <- add_osm_feature(opq = q0, key = 'amenity', value = "clinic") %>%
+  osmdata_sf(.)
+clinics.sf <- st_geometry(clinics$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., clinics$osm_points$amenity) %>%
+  rename(NAME = clinics.osm_points.amenity)
+
+healthcare <- rbind(hospitals.sf,clinics.sf)
+
+
+
+# Amenities - Education (Schools, Colleges, Universities)
+schools <- add_osm_feature(opq = q0, key = 'amenity', value = "school") %>%
+  osmdata_sf(.)
+schools.sf <- st_geometry(schools$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., schools$osm_points$amenity) %>%
+  rename(NAME = schools.osm_points.amenity)
+
+uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
+  osmdata_sf(.)
+uni.sf <- st_geometry(uni$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., uni$osm_points$amenity, ) %>% #cbind is giving me an error, not sure how to fix it: arguments imply differing number of rows: 400, 0.
+  rename(NAME = uni.osm_points.amenity)
+
+education <- rbind(schools.sf,uni.sf) #because uni.sf doesn't have the NAME column the rbind cannot be made as in healthcare
 
 # Add the features for Boulder County
 # You can use this to clip things if it's necessary
@@ -191,7 +264,7 @@ boulder <- coCounties %>%
 #Visualize it
 ggplot() +
   geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data = parks_sf_cent, fill = NA, size = .5) +
+  geom_sf(data = schools.sf, aes(colour = "#ffcdb2"), show.legend = FALSE, size = .25) +
   labs(title="Parks in Boulder County") +
   mapTheme()
 
