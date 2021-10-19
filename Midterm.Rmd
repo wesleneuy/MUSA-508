@@ -106,12 +106,6 @@ boulder.sf <- studentData %>%
   rename(Size = TotalFinishedSF, 
          TotalBedrooms = nbrBedRoom, 
          GarageSize = carStorageSF)
-  
-boulder.sf <-
-  
-
-
-
 
 
 #State Plane Colorado - ESRI:102653
