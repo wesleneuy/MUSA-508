@@ -115,6 +115,27 @@ boulder.sf <- studentData %>%
 
 ```
 
+### Mappring the dependent variable: price
+
+The following map shows home prices spatially distributed across Boulder County.
+
+```{r Price Map, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot() +
+  geom_sf(data = boulderCounty, fill = "grey90") +
+  geom_sf(data = muni) +
+  geom_sf(data = boulder.sf, aes(colour = q5(price)), 
+          show.legend = "point", size = .5) +
+  scale_color_manual(values = palette5,
+                   labels = qBr(boulder.sf, "price"),
+                   name = "Quintile\nBreaks") +
+  labs(title="Gross Home Prices in Boulder County") +
+  mapTheme()
+
+
+
+```
+
 ### Internal Characteristics Selected
 
 Variables of interest: 
@@ -272,15 +293,7 @@ ggplot() +
   mapTheme()
 
 
-ggplot() +
-  geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data = boulder.sf, aes(colour = q5(price)), 
-          show.legend = "point", size = .75) +
-  scale_colour_manual(values = palette5,
-                   labels=qBr(boulder.sf,"Price"),
-                   name="Quintile\nBreaks") +
-  labs(title="Gross Price Boulder") +
-  mapTheme()
+
 
 ```
 
