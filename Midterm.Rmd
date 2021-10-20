@@ -61,7 +61,7 @@ palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
 
 ### Data Gathering Methods
 
-For this project, we used the dfollowing data sets:
+For this project, we used the following data sets:
 
 | Dataset        | Description    | Open Data URL  | File Type | Location |
 | :------------- | :------------- | :------------- | :------------- | :------------- |
@@ -125,7 +125,7 @@ Variables of interest:
 
 ### Boulder Open Spaces and Roads
 
-```{r Open and Roads, echo=FALSE}
+```{r Open and Roads, echo=FALSE, message=FALSE, warning=FALSE}
 
 #Grab open space data set
 openspace <- 
@@ -377,20 +377,111 @@ ggplot() +
 
 ## Exploratory Analysis: Correlation Plots
 
-```{r}
+```{r correlation pt 1 echo=FALSE, message=FALSE, warning=FALSE}
 
-#Home Characteristics Corr
+#ggplot(filter(boulder.sf, price <= 2000000), aes(y=price, x = GarageSize), show.legend = "point", size = .5) +
+#  geom_point(size = .5) +
+ # geom_smooth(method = "lm") +
+  #labs(title = "Price as a function of Size", y = "Price") +
+  #plotTheme()
+
+#Home Characteristics Corr Plots
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2015 - builtYear) %>%
-  dplyr::select(price, Size, Age, TotalBedrooms) %>%
+  dplyr::select(price, Size, Age, TotalBedrooms, GarageSize) %>%
   filter(price <= 1000000, Age < 500) %>%
   gather(Variable, Value, -price) %>% 
-   ggplot(aes(Value, price)) +
+  ggplot(aes(Value, price)) +
      geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     facet_wrap(~Variable, ncol = 4, scales = "free") +
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
 ```
+```{r correlation pt. 2 echo=FALSE, message=FALSE, warning=FALSE}
+
+st_drop_geometry(boulder.sf) %>% 
+  mutate(Age = 2015 - builtYear) %>%
+  dplyr::select(price, Age, TotalBathrooms, mainfloorSF, Ac) %>%
+  filter(price <= 1000000, Age < 500) %>%
+  gather(Variable, Value, -price, -Age) %>% 
+  ggplot(aes(Value, price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 4, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
+```
+
+### Correlation to Categorical Variables
+
+Price as a function of non numeric variables
+
+```{r}
+
+st_drop_geometry(boulder.sf) %>% 
+  dplyr::select(price, designCodeDscr, ConstCodeDscr, IntWallDscr) %>%
+  filter(price <= 1000000) %>%
+  gather(Variable, Value, -price) %>% 
+   ggplot(aes(Value, price)) +
+     geom_bar(position = "dodge", stat = "summary", fun.y = "mean", scientific = FALSE) +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     labs(title = "Price as a function of categorical variables", y = "Mean_Price") +
+     plotTheme() + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+### Regressions for determining correlation strength
+
+Internal characteristics of homes
+```{r}
+reg1 <- lm(price ~ Size, data = boulder.sf)
+
+#Table 1 Kable-Tidy
+lm(price ~ Size, data = boulder.sf) %>%
+  tidy() %>%
+  mutate(p.value = scales::pvalue(p.value))%>%
+  kable(
+    caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
+    Boulder County", 
+    col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
+    digits = c(0, 2, 3, 2, 3),
+    align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling()
+    
+summary(reg1)
+
+
+#Table 1 (Stargazer)
+stargazer(reg1, type = "html", 
+          dep.var.labels=c("Price total"),
+          covariate.labels=c("Size in sqm"))
+
+```
+
+```{r}
+head(boulder.sf)
+
+reg2 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
+                                 dplyr::select(price, Size, builtYear, GarageSize,
+                                               mainfloorSF, TotalBedrooms, 
+                                               TotalBathrooms))
+summary(reg2)
+
+
+
+reg3 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
+                                 dplyr::select(price, Size, builtYear, 
+                                               TotalBedrooms, TotalBathrooms, 
+                                               bsmtSF, parks_nn1, parks_nn2))
+summary(reg3)
+
+#Coefficients of all models
+plot_summs(reg1, reg3, reg2)
+
+```
+
+
+
+
 ```{r}
 #Parks Correlation
 
