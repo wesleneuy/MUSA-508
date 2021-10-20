@@ -123,17 +123,15 @@ The following map shows home prices spatially distributed across Boulder County.
 
 ggplot() +
   geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data = muni) +
+  geom_sf(data = muni, fill = NA) +
   geom_sf(data = boulder.sf, aes(colour = q5(price)), 
           show.legend = "point", size = .5) +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "price"),
                    name = "Quintile\nBreaks") +
+  #geom_sf_text(data = muni, aes(text = rownames(ZONEDESC)), size = 2) +
   labs(title="Gross Home Prices in Boulder County") +
   mapTheme()
-
-
-
 ```
 
 ### Internal Characteristics Selected
