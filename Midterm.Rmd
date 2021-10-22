@@ -1,11 +1,12 @@
 ---
-title: "Midterm"
-author: "Me"
-date: "10/8/2021"
+title: "MUSA 508 - Midterm"
+author: "Veronica Rosado & Weslene Uy"
+date: "10/22/2021"
 output: html_document
 ---
-#Load Packages
+
 ```{r setup, include=FALSE}
+#Load Packages - how do you hide this code in the html?
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
@@ -85,15 +86,16 @@ qBr <- function(df, variable, rnd) {
 q5 <- function(variable) {as.factor(ntile(variable, 5))}
 ```
 
-## Introduction
-This project aims to 
+# Introduction
+Boulder is his project aims to 
 What makes this a difficult exercise?
 Modeling strategy
 Summary of results
 
+#Data Gathering
 ```{r data sets, warning = FALSE}
 #How is the zestimate calculated? https://www.zillow.com/z/zestimate/
-muni <- 
+municipalities <- 
   st_read("~/GitHub/MUSA-508/Municipalities.geojson") %>%
   st_transform('ESRI:102653')
 
@@ -101,28 +103,202 @@ boulderCounty <-
   st_read("~/GitHub/MUSA-508/Midterm/County_Boundary.geojson") %>%
   st_transform('ESRI:102653')
 
-studentData <- 
+housingData <- 
   st_read("~/GitHub/MUSA-508/studentData.geojson", crs = 'ESRI:102254') %>%
   st_transform('ESRI:102653')
 
-boulder.sf <- studentData %>%
+boulder.sf <- housingData %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102653') %>%
-  mutate(TotalBathrooms = nbrThreeQtrBaths + nbrFullBaths + nbrHalfBaths) %>%
+  mutate(pricesqft = ifelse(TotalFinishedSF > 0, (price/TotalFinishedSF), 0),
+    TotalBathrooms = nbrThreeQtrBaths + nbrFullBaths + nbrHalfBaths) %>%
   rename(Size = TotalFinishedSF, 
          TotalBedrooms = nbrBedRoom, 
-         GarageSize = carStorageSF)
+         GarageSize = carStorageSF,
+         BuildingType = designCodeDscr,
+         Quality = qualityCodeDscr,
+         YearBuilt = EffectiveYear)
 ```
+
 #Factors influencing home values
 #Home prices are based on several factors including...
-#location - distance from schools and employment opportunities, restaurants, and other amenities, proximity to highways
+#location - distance from schools and employment opportunities, restaurants, and other amenities, proximity to highways, libraries, trails, homes near marijuana establishments were also found to impact home values, although in some instances
 #Home size also influences its valuation - usable space(excluding garage). Number of bedrooms and bathrooms are important indicators. The age of the house as well as plumbing etc
 
-# Grab OSM data for Boulder County
+##Amenities
 ```{r Parks, warning=FALSE}
+libraries <-
+   st_read("https://opendata.arcgis.com/datasets/7f4ea25ba87345e380d2e896611d2588_0.geojson") %>%
+  st_transform(st_crs('ESRI:102653'))
+
+trails <- 
+   st_read("https://opendata.arcgis.com/datasets/3a950053bbef46c6a3c2abe3aceee3de_0.geojson") %>%
+  st_transform(st_crs('ESRI:102653')) 
+
+marijuanaestablishments <- 
+   st_read("https://opendata.arcgis.com/datasets/425a0adb547a4faba4b741a4fe4373b1_0.geojson") %>%
+  st_transform(st_crs('ESRI:102653'))
+
+parks <- 
+  st_read("~/GitHub/MUSA-508/County_Open_Space.geojson") %>%
+  filter(!is.na(PARK_GROUP)) %>%
+  st_transform('ESRI:102653')
+
+schools <- 
+  st_read("~/GitHub/MUSA-508/Midterm/Schools_Boulder.shp") %>%
+  st_transform('ESRI:102653')
 
 # set bounding box - the maximum x-y extent you are interested in
-q0 <- opq(bbox = c("Boulder County")) #bounding box for boulder
+q0 <- opq(bbox = c("Boulder County")) 
+
+uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
+  osmdata_sf(.)
+uni.sf <- st_geometry(uni$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., uni$osm_points$osm_id) %>% 
+  rename(NAME = uni.osm_points.osm_id)
+
+education <- rbind(schools.sf,uni.sf)
+
+# Healthcare - Hospitals + Clinics
+hospitals <- add_osm_feature(opq = q0, key = 'amenity', value = "hospital") %>%
+  osmdata_sf(.)
+
+hospitals.sf <- st_geometry(hospitals$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., hospitals$osm_points$amenity) %>%
+  rename(NAME = hospitals.osm_points.amenity) %>%
+  #mutate(NAME = is.na(NAME),"hospital")
+  
+clinics <- add_osm_feature(opq = q0, key = 'amenity', value = "clinic") %>%
+  osmdata_sf(.)
+
+clinics.sf <- st_geometry(clinics$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., clinics$osm_points$amenity) %>%
+  rename(NAME = clinics.osm_points.amenity)
+
+healthcare <- rbind(hospitals.sf,clinics.sf)  
+
+#restaurant
+restaurant <- add_osm_feature(opq = q0, key = 'amenity', value = "restaurant") %>%
+  osmdata_sf(.)
+
+restaurant.sf <- st_geometry(restaurant$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., restaurant$osm_points$amenity) %>%
+  rename(NAME = restaurant.osm_points.amenity)
+
+#Grab road data set
+roads <-
+  st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson")%%
+  st_transform('ESRI:102653') %>%
+  filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary"))
+
+#Disaster Risks
+sceniccorridor <- 
+   st_read("https://opendata.arcgis.com/datasets/749ed0a11e454f64a0e5f7c51a786129_0.geojson") %>%
+   st_transform(st_crs('ESRI:102653'))
+
+geohazards <- 
+   st_read("https://opendata.arcgis.com/datasets/ccb02305e30346a4848c99ff94a0e928_0.geojson") %>%
+   st_transform(st_crs('ESRI:102653'))
+
+floodzones <-
+   st_read("https://opendata.arcgis.com/datasets/a9624bd25d854ef7ab0d543e9490ce48_0.geojson") %>%
+   st_transform(st_crs('ESRI:102653'))
+
+wildfires <-
+   st_read("https://opendata.arcgis.com/datasets/61f20f4a64274969a9e740eda5c62de7_0.geojson") %>%
+   st_transform(st_crs('ESRI:102653'))
+```
+
+#Demographic variables - age, race (pct white), median household income
+```{r Census Data, warning=FALSE}
+
+census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
+acs_variable_list.2019 <- load_variables(2019, "acs5")
+
+#Year 2019 tracts 
+tracts19 <-  
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B01002_001E", "B02001_002"),
+          year=2019, state=08, county=013, geometry=T) %>% 
+  st_transform('ESRI:102653')
+
+tracts19 <- 
+  tracts19 %>%
+  select( -NAME, -moe) %>%
+  spread(variable, estimate) %>%
+  select(-geometry) %>%
+  rename(TotalPop = B25026_001, 
+         MedHHInc = B19013_001, 
+         medianage = B01002_001,
+         WhitePop = B02001_002) 
+
+tracts19 <- 
+  tracts19 %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, WhitePop / TotalPop, 0))
+
+demographicvar <- st_join(boulder.sf, tracts19, join = st_within)
+            
+```
+
+#Data Wrangling
+```{r Data wrangling, warning=FALSE}
+
+## Nearest Neighbor Feature for amenities
+st_c <- st_coordinates
+
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      libraries_nn1 = nn_function(st_c(boulder.sf), st_c(libraries), 1),
+      libraries_nn2 = nn_function(st_c(boulder.sf), st_c(libraries), 2), 
+      libraries_nn3 = nn_function(st_c(boulder.sf), st_c(libraries), 3), 
+      libraries_nn4 = nn_function(st_c(boulder.sf), st_c(libraries), 4), 
+      libraries_nn5 = nn_function(st_c(boulder.sf), st_c(libraries), 5)) 
+
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      trails_nn1 = nn_function(st_c(boulder.sf), st_c(trails), 1),
+      trails_nn2 = nn_function(st_c(boulder.sf), st_c(trails), 2), 
+      trails_nn3 = nn_function(st_c(boulder.sf), st_c(trails), 3), 
+      trails_nn4 = nn_function(st_c(boulder.sf), st_c(trails), 4), 
+      trails_nn5 = nn_function(st_c(boulder.sf), st_c(trails), 5)) 
+
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      marijuanaestablishments_nn1 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 1),
+      marijuanaestablishments_nn2 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 2), 
+      marijuanaestablishments_nn3 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 3), 
+      marijuanaestablishments = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 4), 
+      marijuanaestablishments = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 5)) 
+
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      schools_nn1 = nn_function(st_c(boulder.sf), st_c(schools), 1),
+      schools_nn2 = nn_function(st_c(boulder.sf), st_c(schools), 2), 
+      schools_nn3 = nn_function(st_c(boulder.sf), st_c(schools), 3), 
+      schools_nn4 = nn_function(st_c(boulder.sf), st_c(schools), 4), 
+      schools_nn5 = nn_function(st_c(boulder.sf), st_c(schools), 5)) 
+
+#university
+
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      education_nn1 = nn_function(st_c(boulder.sf), st_c(education), 1),
+      education_nn2 = nn_function(st_c(boulder.sf), st_c(education), 2), 
+      education_nn3 = nn_function(st_c(boulder.sf), st_c(education), 3), 
+      education_nn4 = nn_function(st_c(boulder.sf), st_c(education), 4), 
+      education_nn5 = nn_function(st_c(boulder.sf), st_c(education), 5)) 
 
 # Parks
 
@@ -150,68 +326,16 @@ boulder.sf <-
       park_nn4 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 4), 
       park_nn5 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 5)) 
 
-```
-
-```{r Schools, warning=FALSE}
-
-# Schools
-schools <- 
-  st_read("~/GitHub/MUSA-508/Midterm/Schools_Boulder.shp") %>%
-  st_transform('ESRI:102653')
-
-
-## Nearest Neighbor Feature for schools
-st_c <- st_coordinates
+openspace.sf <- st_centroid(openspace)
 
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
-      schools_nn1 = nn_function(st_c(boulder.sf), st_c(schools), 1),
-      schools_nn2 = nn_function(st_c(boulder.sf), st_c(schools), 2), 
-      schools_nn3 = nn_function(st_c(boulder.sf), st_c(schools), 3), 
-      schools_nn4 = nn_function(st_c(boulder.sf), st_c(schools), 4), 
-      schools_nn5 = nn_function(st_c(boulder.sf), st_c(schools), 5)) 
-
-#university
-uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
-  osmdata_sf(.)
-uni.sf <- st_geometry(uni$osm_points) %>%
-  st_transform(4326) %>%
-  st_sf() %>%
-  cbind(., uni$osm_points$osm_id) %>% 
-  rename(NAME = uni.osm_points.osm_id)
-
-education <- rbind(schools.sf,uni.sf)
-
-```
-
-```{r Hospitals, warning=FALSE}
-
-# set bounding box - the maximum x-y extent you are interested in
-q0 <- opq(bbox = c("Boulder County")) #bounding box for boulder
-
-# Hospitals
-# Amenities - Hospitals + Clinics
-hospitals <- add_osm_feature(opq = q0, key = 'amenity', value = "hospital") %>%
-  osmdata_sf(.)
-
-hospitals.sf <- st_geometry(hospitals$osm_points) %>%
-  st_transform(4326) %>%
-  st_sf() %>%
-  cbind(., hospitals$osm_points$amenity) %>%
-  rename(NAME = hospitals.osm_points.amenity) %>%
-  #mutate(NAME = is.na(NAME),"hospital")
-  
-clinics <- add_osm_feature(opq = q0, key = 'amenity', value = "clinic") %>%
-  osmdata_sf(.)
-
-clinics.sf <- st_geometry(clinics$osm_points) %>%
-  st_transform(4326) %>%
-  st_sf() %>%
-  cbind(., clinics$osm_points$amenity) %>%
-  rename(NAME = clinics.osm_points.amenity)
-
-healthcare <- rbind(hospitals.sf,clinics.sf)  
+      openspace_nn1 = nn_function(st_c(boulder.sf), st_c(openspace.sf),1),
+      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 2), 
+      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 3), 
+      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 4), 
+      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 5)) 
 
 boulder.sf <-
   boulder.sf  %>% 
@@ -221,31 +345,19 @@ boulder.sf <-
       healthcare_nn3 = nn_function(st_c(boulder.sf), st_c(healthcare), 3), 
       healthcare_nn4 = nn_function(st_c(boulder.sf), st_c(healthcare), 4), 
       healthcare_nn5 = nn_function(st_c(boulder.sf), st_c(healthcare), 5)) 
-```
-
-```{r Restaurants, warning=FALSE}
-# Amenities - Restaurant
-
-restaurant <- add_osm_feature(opq = q0, key = 'amenity', value = "restaurant") %>%
-  osmdata_sf(.)
-
-restaurant.sf <- st_geometry(restaurant$osm_points) %>%
-  st_transform(4326) %>%
-  st_sf() %>%
-  cbind(., restaurant$osm_points$amenity) %>%
-  rename(NAME = restaurant.osm_points.amenity)
 
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
-      healthcare_nn1 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 1),
-      healthcare_nn2 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 2), 
-      healthcare_nn3 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 3), 
-      healthcare_nn4 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 4), 
-      healthcare_nn5 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 5)) 
+      restaurant_nn1 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 1),
+      restaurant_nn2 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 2), 
+      restaurant_nn3 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 3), 
+      restaurant_nn4 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 4), 
+      restaurant_nn5 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 5)) 
+```
 
-# Add the features for Boulder County
-# You can use this to clip things if it's necessary
+```{r Restaurants, warning=FALSE}
+
 
 coCounties <- counties(state = 'CO', cb = FALSE)
 
@@ -254,37 +366,11 @@ boulder <- coCounties %>%
   st_as_sf() %>%
   st_transform(4326)
 
-# Map it
-
-ggplot()+
-  geom_sf(data = boulder, color = "black")+
-  scale_color_manual(values = c("orange", "blue"))+
-  geom_sf(data = park.sf, fill = "light green", color = "transparent")+
-  geom_sf(data = restaurant.sf, color = "red", size = 0.2, alpha = 0.2)
 ```
 
-```{r wildfire, echo=FALSE}
-#Grab wildfire
-openspace <- 
-  st_read("~/GitHub/MUSA-508/County_Open_Space.geojson") %>%
-  filter(!is.na(PARK_GROUP)) %>%
-  st_transform('ESRI:102653')
-```
 
-```{r road, echo=FALSE}
-#Grab road data set
-roads <-
-  st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson")%%
-  st_transform('ESRI:102653') %>%
-  filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary"))
-```
+#72% of residents drive to work; mean age is 39
 
-```{r pressure, echo=FALSE}
-#Grab open space data set
-openspace <- 
-  st_read("~/GitHub/MUSA-508/County_Open_Space.geojson") %>%
-  filter(!is.na(PARK_GROUP)) %>%
-  st_transform('ESRI:102653')
 ```
 
 ### Mapping the dependent variable: price
@@ -303,6 +389,22 @@ ggplot() +
   labs(title="Gross Home Prices in Boulder County") +
   mapTheme()
 ```
+#Mapping  
+ggplot(tracts19)+
+  geom_sf(data = st_union(tracts10))+
+  geom_sf(aes(fill = q5(TotalPop))) +
+  geom_sf(data = buffer, fill = "transparent", color = "red")+
+  scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group, "TotalPop"),
+                    name = "Population\n(Quintile Breaks)") +
+  labs(title = "Population 2010-2017", subtitle = "Atlanta, GA") +
+  facet_wrap(~year)+
+  mapTheme() +
+  theme(plot.title = element_text(size=22))
+
+# find points within polygons
+demographicvar <- st_join(boulder.sf, tracts19, join = st_intersect)
+
 
 ### Mapping the independent variables
 ```{Independent Variables Map, echo=FALSE, message=FALSE, warning=FALSE}
@@ -347,52 +449,6 @@ ggplot() +
   mapTheme()
 ```
 
-#Including demographic variables
-```{r Census Data, warning=FALSE}
-
-census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
-acs_variable_list.2019 <- load_variables(2019, "acs5")
-
-#Year 2019 tracts
-tracts19 <-  
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E"),
-          year=2019, state=08, county=013, geometry=T) %>% 
-  st_transform('ESRI:102653')
-
-tracts19 <- 
-  tracts19 %>%
-  select( -NAME, -moe) %>%
-  spread(variable, estimate) %>%
-  select(-geometry) %>%
-  rename(TotalPop = B25026_001, 
-         MedHHInc = B19013_001, 
-         )
-
-point to polygon join 
-#tracts19 <- 
-  #tracts19 %>%
-  #mutate(pctWhite = ifelse(TotalPop > 0, WhitePop / TotalPop, 0),
-   #            pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
-    #           year = "2019") %>%
-  #select(-WhitePop,-FemaleBachelors,-MaleBachelors)
-
-#Mapping  
-ggplot(tracts19)+
-  geom_sf(data = st_union(tracts10))+
-  geom_sf(aes(fill = q5(TotalPop))) +
-  geom_sf(data = buffer, fill = "transparent", color = "red")+
-  scale_fill_manual(values = palette5,
-                    labels = qBr(allTracts.group, "TotalPop"),
-                    name = "Population\n(Quintile Breaks)") +
-  labs(title = "Population 2010-2017", subtitle = "Atlanta, GA") +
-  facet_wrap(~year)+
-  mapTheme() +
-  theme(plot.title = element_text(size=22))
-
-# find points within polygons
-tree_in_tract <- st_join(boulder.sf, tracts19, join = st_within)
-                                         
-```
 
 ## Exploratory Analysis: Correlation Plots
 
@@ -428,6 +484,40 @@ st_drop_geometry(boulder.sf) %>%
      facet_wrap(~Variable, ncol = 4, scales = "free") +
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
+```
+```{r distance to amenities echo=FALSE, message=FALSE, warning=FALSE}
+
+#Distance to amenities
+st_drop_geometry(boulder.sf) %>% 
+  mutate(Age = 2015 - builtYear) %>%
+  dplyr::select(price, Age, openspace_nn1, schools_nn1, healthcare_nn1) %>%
+  filter(price <= 1000000, Age < 500) %>%
+  gather(Variable, Value, -price) %>% 
+  ggplot(aes(Value, price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 4, scales = "free") +
+     labs(title = "Price as a function of continuous variables") +
+     plotTheme()
+```
+## Correlation Matrix
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
+
+numericVars <- 
+  select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit()
+
+corrplot <- boulder.sf %>% select(price)
+
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  show.diag = TRUE,
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables")
+
 ```
 
 ### Correlation to Categorical Variables
@@ -520,24 +610,7 @@ boulder.sf %>%
 ```
 
 
-## Correlation Matrix
 
-```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
-
-numericVars <- 
-  select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit()
-
-
-ggcorrplot(
-  round(cor(numericVars), 1), 
-  p.mat = cor_pmat(numericVars),
-  show.diag = TRUE,
-  colors = c("#25CB10", "white", "#FA7800"),
-  type="lower",
-  insig = "blank") +  
-    labs(title = "Correlation across numeric variables")
-
-```
 
 #Training Model
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
