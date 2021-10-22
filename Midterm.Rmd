@@ -87,10 +87,19 @@ q5 <- function(variable) {as.factor(ntile(variable, 5))}
 ```
 
 # Introduction
-Boulder is his project aims to 
-What makes this a difficult exercise?
-Modeling strategy
-Summary of results
+This project aims to develop a model that can predict future home values by using geospatial machine learning processes. We basically deconstruct the different components and constituents that could describe a home and its value. As we know, usually market rate and economic valuation under capitalist systems are based on subjective factors that can be geographically identified. In a national scale, a home's location for example, might influence it's valuation over many other variables. In a more local scale, we could have both cases. First is the clustering of similar price ranges based on similarity across. Second is a differentiated price based on unique qualities of a home in contrast with its closest homes, which is often described with non-numerical factors such as aesthetic value, historical significance, style, materials, etc. 
+
+In this model we mainly focus on the first, but we do not fully dismiss non-numerical characteristics that could help predict future home prices as well. 
+
+## Modeling strategy and Methodology:
+To develop the model we gathered all the data from Boulder Open Data, Open Street Map and the U.S. Census. We used geojson and API file formats. Secondly, we turned the homes data (provided by the instructors) into an spatial feature dataset that was then joined to the multiple external variables (parks, education, health, roads, hazards, income and age groups to name a few). Following this we did an exploratory analysis of the dataset and visualized the correlation of home prices to both internal and external variables using an ordinary least square (OLS) matrix. We used multivariate regressions to test model's fitness and which variable groups are stronger predictors than other after seeing OLS relationships. Afterwards we splitted the data into a training set (0) and a test set (1), that is then used to predict home sale prices for the Boulder County homes. This is evaluated for generalizability in the end, meaning that a second training/test model is done at the municipality scale to check if the model is a good predictor for different contexts across groups and not just our selected geography. 
+
+## Summary of results:
+
+
+
+### Data Gathering Methods
+
 
 #Data Gathering
 ```{r data sets, warning = FALSE}
@@ -125,6 +134,35 @@ boulder.sf <- housingData %>%
 #location - distance from schools and employment opportunities, restaurants, and other amenities, proximity to highways, libraries, trails, homes near marijuana establishments were also found to impact home values, although in some instances
 #Home size also influences its valuation - usable space(excluding garage). Number of bedrooms and bathrooms are important indicators. The age of the house as well as plumbing etc
 
+### What internal and external factors influence home value?
+
+We selected a few variables that at we believe would be good price predictors for home prices in Boulder County. 
+
+Context for external: 
+Based on the demographics, it is a relatively white county, with over 85% of the population being white. median income rates are also high in about 80k for median income, doubling the national average. This should explain why ownership is higher than rented homes for example. Most people seem to drive to work, and the average commute in the county is 23 minutes. 
+Parks and open spaces are an important highlight of Boulder County as well. These amenities are an attraction to both locals and tourists, probably becoming a strong factor influencing home values relative to their proximity. Physical activity and access to green trails seems important for households in Boulder County. A survey by the Centers for Disease Control found that Colorado had fewer overweight people per capita and more people who exercise than any other state. While most people commute by car to jobs and amenities, it seems that physical activity is described through these natural assets. In a post COVID/work from home scenario, access to these sites might be a strong variable for home price. 
+Based on census and fast facts, education, health and leisure seem a priority for Boulder County citizens. Distance to amenities such as schools, colleges, universities, and restaurants are also considered in this project. 
+
+Homes' internal characteristics:
+Physical characteristics of the homes are important factors for predicting home values. As in appraisals, the quality, age, size, number of bedrooms and bathrooms all influence it valuation. Functioning characteristics such as AC/Heating and plumbing systems also influence price.
+
+library(dplyr)
+#Summary of Internal Descriptive Characteristics: Non Numeric vs Numeric
+#I want to do 2 tables here to show numeric vs categorical. Divide the 55 column names into the two groups and who that on a table
+HomeSummary <- 
+  boulder.sf %>%
+  st_drop_geometry() %>%
+  dplyr::select(price, Size, builtYear) %>%
+  summarize(sum = r(Size)) %>%
+  kable(
+    caption = "Glimpse of Variables to Describe Home Prices in Boulder County", 
+    #col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
+    digits = c(0, 2, 3, 2, 3),
+    align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling()
+    
+summary(boulder.sf)
 ##Amenities
 ```{r Parks, warning=FALSE}
 libraries <-
@@ -451,6 +489,7 @@ ggplot() +
 
 
 ## Exploratory Analysis: Correlation Plots
+The Exploratory Analysis here helped us understand which variables (internal and external; numeric or categorical) are positively correlated to price change. 
 
 ```{r correlation pt 1 echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -610,8 +649,6 @@ boulder.sf %>%
 ```
 
 
-
-
 #Training Model
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 bouldert.sf <- filter(boulder.sf, toPredict==0)
@@ -652,6 +689,102 @@ reg.cv <-
 reg.cv
 
 reg.cv$resample[1:5,]
+```
+
+## Mean absolute error MAE by Municipality
+
+The municipality effects accounts for the mean of prices if the values from price to prediction are equal, meaning that other categorical features might be good for price prediction. 
+
+Summary of reg.nhood will indicte if municipality is highly significant here. 
+
+```{r}
+#Grouping prediction data by muni
+left_join(
+  st_drop_geometry(boston.test) %>%
+    group_by(Name) %>%
+    summarize(meanPrice = mean(SalePrice, na.rm = T)),
+  mutate(boston.test, predict.fe = 
+                        predict(lm(SalePrice ~ Name, data = boston.test), 
+                        boston.test)) %>%
+    st_drop_geometry %>%
+    group_by(Name) %>%
+      summarize(meanPrediction = mean(predict.fe))) %>%
+      kable() %>% kable_styling()
+#Prediction Data by Municipality
+reg.nhood <- lm(SalePrice ~ ., data = as.data.frame(boston.training) %>% 
+                                 dplyr::select(Name, SalePrice, LivingArea, 
+                                               Style, GROSS_AREA, NUM_FLOORS.cat,
+                                               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
+                                               R_KITCH, R_AC, R_FPLACE,crimes.Buffer))
+boston.test.nhood <-
+  boston.test %>%
+  mutate(Regression = "Neighborhood Effects",
+         SalePrice.Predict = predict(reg.nhood, boston.test),
+         SalePrice.Error = SalePrice.Predict- SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict- SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict- SalePrice)) / SalePrice)%>%
+  filter(SalePrice < 5000000)
+#binds error metrics
+bothRegressions <- 
+  rbind(
+    dplyr::select(boston.test, starts_with("SalePrice"), Regression, Name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(boston.test.nhood, starts_with("SalePrice"), Regression, Name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error))) 
+```
+
+## Scatterplot plot of MAPE by neighborhood as a function of mean price
+
+```{r}
+st_drop_geometry(bothRegressions) %>%
+  group_by(Regression, Name) %>%
+  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(nhoods) %>%
+    st_sf() %>%
+    ggplot() + 
+      geom_sf(aes(fill = mean.MAPE)) +
+      geom_sf(data = bothRegressions, colour = "black", size = .5) +
+      facet_wrap(~Regression) +
+      scale_fill_gradient(low = palette5[1], high = palette5[5],
+                          name = "MAPE") +
+      labs(title = "Mean test set MAPE by neighborhood") +
+      mapTheme()
+#Table differentiating MAPE from MAE
+st_drop_geometry(bothRegressions) %>%
+  gather(Variable, Value, -Regression, -Name) %>%
+  filter(Variable == "SalePrice.AbsError" | Variable == "SalePrice.APE") %>%
+  group_by(Regression, Variable) %>%
+    summarize(meanValue = mean(Value, na.rm = T)) %>%
+    spread(Variable, meanValue) %>%
+    kable()
+```
+
+## Generalizability of the models in this project
+
+In class, we discussed the concept of generalizability
+
+
+
+
+
+### Misc
+
+```{r}
+# Add the features for Boulder County
+# You can use this to clip things if it's necessary
+coCounties <- counties(state = 'CO', cb = FALSE)
+boulder <- coCounties %>%
+  filter(NAME == "Boulder") %>%
+  st_as_sf() %>%
+  st_transform(4326)
+schools <- add_osm_feature(opq = q0, key = 'amenity', value = "school") %>%
+  osmdata_sf(.)
+schools.sf <- st_geometry(schools$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., schools$osm_points$amenity) %>%
+  rename(NAME = "School")
 ```
 
 #Discussion: Is this an effective model? What were some of the more interesting variables?
