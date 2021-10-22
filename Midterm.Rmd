@@ -455,7 +455,10 @@ tracts19 <-
          )
 
 #point to polygon spatial join
-
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      st_join(boulder.sf, tracts19, join = st_within))
 
 ```
 
@@ -599,8 +602,9 @@ boulder.sf %>%
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 
 numericVars <- 
-  select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit()
+  select_if(st_drop_geometry(boulder.sf), is.numeric) %>%
 
+corrplot <- boulder.sf %>% select(price)
 
 ggcorrplot(
   round(cor(numericVars), 1), 
