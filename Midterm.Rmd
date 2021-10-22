@@ -152,13 +152,19 @@ openspace <-
   filter(!is.na(PARK_GROUP)) %>%
   st_transform('ESRI:102653')
 
+
+```
+
+### Roads 
+
+```{r}
 #Grab road data set
 roads.sf <-
   st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson") %>%
   st_transform('ESRI:102653') %>% 
   dplyr::select(OBJECTID, STREET_NAME, SPECIFIC_CATEGORY, geometry) %>%
-  filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary"))
-  
+  filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary")) %>%
+
 
 ggplot() +
   geom_sf(data = boulderCounty, fill = "grey90") +
@@ -166,7 +172,62 @@ ggplot() +
   labs(title="Boulder County Roads") +
   mapTheme()
 
+boulder.sf <-
+  boulder.sf %>%
+    mutate(
+      roads_n = st_nearest_feature(boulder.sf,roads.sf,check_crs = TRUE,longlat =
+                                isTRUE(st_is_longlat(boulder.sf))))
+
+#Buffer distance
+roadBuffer <- 
+  rbind(
+    st_buffer(roads.sf, 2640) %>%
+      mutate(Legend = "1/2mi Buffer") %>%
+      dplyr::select(Legend),
+  st_union(st_buffer(roads.sf, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+Unioned_buffer <- filter(roadBuffer, Legend=="Unioned Buffer")
+
+boulder.sf <- 
+  st_join(boulder.sf, Unioned_buffer,join = st_intersects,
+  #suffix = c(".x", ".y"),
+  left = TRUE, largest = FALSE)
+    
+ls1 = roads.sf[]
+
+boulder.sf <- 
+  rbind(
+    st_centroid(boulder.sf)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD"))
+
+ggplot() +
+  geom_sf(data = boulderCounty, fill = "grey90") +
+  #geom_sf(data = roads.sf, fill = "black") +
+  geom_sf(data = Unioned_buffer, fill = NA) +
+  geom_sf(data = boulder.sf, aes(colour = q5(roads_n)), 
+          show.legend = "point", size = .5) +
+  scale_color_manual(values = palette5,
+                   labels = qBr(boulder.sf, "roads_n"),
+                   name = "Quintile\nBreaks") +
+  geom_sf_label(data = muni, aes(label = ZONEDESC), size = 2) +
+  labs(title="Distances of Homes to Roads in meters") +
+  mapTheme()
+
 ```
+  
+
+
+
 
 ### OSM Data for Boulder County
 
@@ -241,7 +302,6 @@ hospitals.sf <- st_geometry(hospitals$osm_points) %>%
   rename(NAME = hospitals.osm_points.amenity) %>%
   #mutate(NAME = is.na(NAME),"hospital")
 
-
 clinics <- add_osm_feature(opq = q0, key = 'amenity', value = "clinic") %>%
   osmdata_sf(.)
 clinics.sf <- st_geometry(clinics$osm_points) %>%
@@ -251,7 +311,6 @@ clinics.sf <- st_geometry(clinics$osm_points) %>%
   rename(NAME = clinics.osm_points.amenity)
 
 healthcare <- rbind(hospitals.sf,clinics.sf)
-
 
 
 # Amenities - Education (Schools, Colleges, Universities)
@@ -268,10 +327,10 @@ uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
 uni.sf <- st_geometry(uni$osm_points) %>%
   st_transform(4326) %>%
   st_sf() %>%
-  cbind(., uni$osm_points$osm_id) %>% #cbind is giving me an error, not sure how to fix it: arguments imply differing number of rows: 400, 0.
+  cbind(., uni$osm_points$osm_id) %>% 
   rename(NAME = uni.osm_points.osm_id)
 
-education <- rbind(schools.sf,uni.sf) #because uni.sf doesn't have the NAME column the rbind cannot be made as in healthcare
+education <- rbind(schools.sf,uni.sf) 
 
 # Add the features for Boulder County
 # You can use this to clip things if it's necessary
@@ -372,65 +431,8 @@ boulder.sf <-
 
 ```
 
-```{r Distance to Roads echo=FALSE, message=FALSE, warning=FALSE}
-
-boulder.sf <-
-  boulder.sf %>%
-    mutate(
-      roads_n = st_nearest_feature(boulder.sf,roads.sf,check_crs = TRUE,longlat =
-                                isTRUE(st_is_longlat(boulder.sf))))
-
-#Buffer distance
-roadBuffer <- 
-  rbind(
-    st_buffer(roads.sf, 2640) %>%
-      mutate(Legend = "1/2mi Buffer") %>%
-      dplyr::select(Legend),
-  st_union(st_buffer(roads.sf, 2640)) %>%
-      st_sf() %>%
-      mutate(Legend = "Unioned Buffer"))
-
-Unioned_buffer <- filter(roadBuffer, Legend=="Unioned Buffer")
-
-MRBuffer <-
-  st_join(
-    st_centroid(dplyr::select(boulder.sf, geometry, price, builtYear)),
-    multipleRingBuffer(Unioned_buffer,10000,26400)) %>%
-  st_drop_geometry() %>%
-  left_join(dplyr::select(boulder.sf, price, builtYear),
-            by=c("price"="price")) %>%
-  st_sf() %>%
-  replace_na(list(distance = 0))%>% 
-  mutate(distance = distance+26400)
-
-boulder.sf <- 
-  rbind(
-    st_centroid(boulder.)[buffer,] %>%
-      st_drop_geometry() %>%
-      left_join(allTracts) %>%
-      st_sf() %>%
-      mutate(TOD = "TOD"),
-    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
-      st_drop_geometry() %>%
-      left_join(allTracts) %>%
-      st_sf() %>%
-      mutate(TOD = "Non-TOD"))
-
-ggplot() +
-  geom_sf(data = boulderCounty, fill = "grey90") +
-  #geom_sf(data = roads.sf, fill = "black") +
-  geom_sf(data = Unioned_buffer, fill = NA) +
-  #geom_sf(data = boulder.sf, aes(colour = q5(roads_n)), 
-          #show.legend = "point", size = .5) +
-  #scale_color_manual(values = palette5,
-   #                labels = qBr(boulder.sf, "roads_n"),
-    #               name = "Quintile\nBreaks") +
-  #geom_sf_label(data = muni, aes(label = ZONEDESC), size = 2) +
-  labs(title="Distances of Homes to Roads in meters") +
-  mapTheme()
-
+```{r  echo=FALSE, message=FALSE, warning=FALSE}
 ```
-
 
 ## Exploratory Analysis: Correlation Plots
 
@@ -445,7 +447,7 @@ ggplot() +
 #Home Characteristics Corr Plots
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2015 - builtYear) %>%
-  dplyr::select(price, Size, Age, TotalBedrooms, GarageSize) %>%
+  dplyr::select(price, Size, Age, TotalBedrooms, GarageSize, ) %>%
   filter(price <= 1000000, Age < 500) %>%
   gather(Variable, Value, -price) %>% 
   ggplot(aes(Value, price)) +
@@ -514,6 +516,7 @@ stargazer(reg1, type = "html",
 
 ```
 
+
 ```{r}
 head(boulder.sf)
 
@@ -577,5 +580,79 @@ ggcorrplot(
 
 ```
 
+## Mean absolute error MAE by Municipality
 
+```{r}
+
+#Grouping prediction data by muni
+left_join(
+  st_drop_geometry(boston.test) %>%
+    group_by(Name) %>%
+    summarize(meanPrice = mean(SalePrice, na.rm = T)),
+  mutate(boston.test, predict.fe = 
+                        predict(lm(SalePrice ~ Name, data = boston.test), 
+                        boston.test)) %>%
+    st_drop_geometry %>%
+    group_by(Name) %>%
+      summarize(meanPrediction = mean(predict.fe))) %>%
+      kable() %>% kable_styling()
+
+
+#Prediction Data by Municipality
+reg.nhood <- lm(SalePrice ~ ., data = as.data.frame(boston.training) %>% 
+                                 dplyr::select(Name, SalePrice, LivingArea, 
+                                               Style, GROSS_AREA, NUM_FLOORS.cat,
+                                               R_BDRMS, R_FULL_BTH, R_HALF_BTH, 
+                                               R_KITCH, R_AC, R_FPLACE,crimes.Buffer))
+
+boston.test.nhood <-
+  boston.test %>%
+  mutate(Regression = "Neighborhood Effects",
+         SalePrice.Predict = predict(reg.nhood, boston.test),
+         SalePrice.Error = SalePrice.Predict- SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict- SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict- SalePrice)) / SalePrice)%>%
+  filter(SalePrice < 5000000)
+
+
+#binds error metrics
+bothRegressions <- 
+  rbind(
+    dplyr::select(boston.test, starts_with("SalePrice"), Regression, Name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(boston.test.nhood, starts_with("SalePrice"), Regression, Name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error))) 
+
+```
+
+## Scatterplot plot of MAPE by neighborhood as a function of mean price
+
+```{r}
+
+st_drop_geometry(bothRegressions) %>%
+  group_by(Regression, Name) %>%
+  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(nhoods) %>%
+    st_sf() %>%
+    ggplot() + 
+      geom_sf(aes(fill = mean.MAPE)) +
+      geom_sf(data = bothRegressions, colour = "black", size = .5) +
+      facet_wrap(~Regression) +
+      scale_fill_gradient(low = palette5[1], high = palette5[5],
+                          name = "MAPE") +
+      labs(title = "Mean test set MAPE by neighborhood") +
+      mapTheme()
+
+#Table differentiating MAPE from MAE
+st_drop_geometry(bothRegressions) %>%
+  gather(Variable, Value, -Regression, -Name) %>%
+  filter(Variable == "SalePrice.AbsError" | Variable == "SalePrice.APE") %>%
+  group_by(Regression, Variable) %>%
+    summarize(meanValue = mean(Value, na.rm = T)) %>%
+    spread(Variable, meanValue) %>%
+    kable()
+
+
+```
 
