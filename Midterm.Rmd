@@ -93,7 +93,7 @@ Summary of results
 
 ```{r data sets, warning = FALSE}
 #How is the zestimate calculated? https://www.zillow.com/z/zestimate/
-muni <- #do we need this layer or do we just use census tracts?
+muni <- 
   st_read("~/GitHub/MUSA-508/Municipalities.geojson") %>%
   st_transform('ESRI:102653')
 
@@ -163,7 +163,7 @@ schools <-
 ## Nearest Neighbor Feature for schools
 st_c <- st_coordinates
 
-schools.sf <-
+boulder.sf <-
   boulder.sf  %>% 
     mutate(
       schools_nn1 = nn_function(st_c(boulder.sf), st_c(schools), 1),
@@ -172,13 +172,17 @@ schools.sf <-
       schools_nn4 = nn_function(st_c(boulder.sf), st_c(schools), 4), 
       schools_nn5 = nn_function(st_c(boulder.sf), st_c(schools), 5)) 
 
+#university
 uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
   osmdata_sf(.)
 uni.sf <- st_geometry(uni$osm_points) %>%
   st_transform(4326) %>%
   st_sf() %>%
-  cbind(., uni$osm_points$amenity, ) %>% #cbind is giving me an error, not sure how to fix it: arguments imply differing number of rows: 400, 0.
-  rename(NAME = uni.osm_points.amenity)
+  cbind(., uni$osm_points$osm_id) %>% 
+  rename(NAME = uni.osm_points.osm_id)
+
+education <- rbind(schools.sf,uni.sf)
+
 ```
 
 ```{r Hospitals, warning=FALSE}
@@ -209,7 +213,7 @@ clinics.sf <- st_geometry(clinics$osm_points) %>%
 
 healthcare <- rbind(hospitals.sf,clinics.sf)  
 
-healthcare.sf <-
+boulder.sf <-
   boulder.sf  %>% 
     mutate(
       healthcare_nn1 = nn_function(st_c(boulder.sf), st_c(healthcare), 1),
@@ -231,7 +235,7 @@ restaurant.sf <- st_geometry(restaurant$osm_points) %>%
   cbind(., restaurant$osm_points$amenity) %>%
   rename(NAME = restaurant.osm_points.amenity)
 
-restaurant.sf <-
+boulder.sf <-
   boulder.sf  %>% 
     mutate(
       healthcare_nn1 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 1),
@@ -350,6 +354,11 @@ census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrit
 acs_variable_list.2019 <- load_variables(2019, "acs5")
 
 #Year 2019 tracts
+tracts19 <-  
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E"),
+          year=2019, state=08, county=013, geometry=T) %>% 
+  st_transform('ESRI:102653')
+
 tracts19 <- 
   tracts19 %>%
   select( -NAME, -moe) %>%
@@ -359,6 +368,7 @@ tracts19 <-
          MedHHInc = B19013_001, 
          )
 
+point to polygon join 
 #tracts19 <- 
   #tracts19 %>%
   #mutate(pctWhite = ifelse(TotalPop > 0, WhitePop / TotalPop, 0),
@@ -378,6 +388,9 @@ ggplot(tracts19)+
   facet_wrap(~year)+
   mapTheme() +
   theme(plot.title = element_text(size=22))
+
+# find points within polygons
+tree_in_tract <- st_join(boulder.sf, tracts19, join = st_within)
                                          
 ```
 
@@ -528,12 +541,14 @@ ggcorrplot(
 
 #Training Model
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
+bouldert.sf <- filter(boulder.sf, toPredict==0)
+
 inTrain <- createDataPartition(
-              y = paste(boulder.sf$Size, boulder.sf$builtYear, boulder.sf$TotalBedrooms), 
+              y = paste(bouldert.sf$Size, bouldert.sf$builtYear, bouldert.sf$TotalBedrooms), 
               p = .75, list = FALSE)
 
-boulder.training <- boulder.sf[inTrain,] 
-boulder.test <- boulder.sf[-inTrain,]  
+boulder.training <- bouldert.sf[inTrain,] 
+boulder.test <- bouldert.sf[-inTrain,]  
 
 reg.training <- lm(price ~ ., data = st_drop_geometry(boulder.training) %>% 
                                     dplyr::select(price, Size, builtYear, TotalBedrooms,                                                   TotalBathrooms, bsmtSF, park_nn1,                                                      park_nn2))
@@ -553,6 +568,17 @@ mean(boulder.test$price.AbsError, na.rm = T)
 mean(boulder.test$price.APE, na.rm = T)
 
 #Generalizability
+fitControl <- trainControl(method = "cv", number = 100)
+set.seed(825)
+
+reg.cv <- 
+  train(price ~ ., data = st_drop_geometry(bouldert.sf) %>% 
+                                dplyr::select(price, Size, builtYear, TotalBedrooms,                                                  TotalBathrooms, bsmtSF, park_nn1,                                                      park_nn2), 
+     method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
+reg.cv$resample[1:5,]
 ```
 
 #Discussion: Is this an effective model? What were some of the more interesting variables?
