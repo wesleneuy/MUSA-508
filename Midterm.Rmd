@@ -59,9 +59,23 @@ palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
 
 ```
 
+## Introduction
+
+This project aims to develop a model that can predict future home values by using geospatial machine learning processes. We basically deconstruct the different components and constituents that could describe a home and its value. As we know, usually market rate and economic valuation under capitalist systems are based on subjective factors that can be geographically identified. In a national scale, a home's location for example, might influence it's valuation over many other variables. In a more local scale, we could have both cases. First is the clustering of similar price ranges based on similarity across. Second is a differentiated price based on unique qualities of a home in contrast with its closest homes, which is often described with non-numerical factors such as aesthetic value, historical significance, style, materials, etc. 
+
+In this model we mainly focus on the first, but we do not fully dismiss non-numerical characteristics that could help predict future home prices as well. 
+
+
+## Modeling strategy and Methodology:
+To develop the model we gathered all the data from Boulder Open Data, Open Street Map and the U.S. Census. We used geojson and API file formats. Secondly, we turned the homes data (provided by the instructors) into an spatial feature dataset that was then joined to the multiple external variables (parks, education, health, roads, hazards, income and age groups to name a few). Following this we did an exploratory analysis of the dataset and visualized the correlation of home prices to both internal and external variables using an ordinary least square (OLS) matrix. We used multivariate regressions to test model's fitness and which variable groups are stronger predictors than other after seeing OLS relationships. Afterwards we splitted the data into a training set (0) and a test set (1), that is then used to predict home sale prices for the Boulder County homes. This is evaluated for generalizability in the end, meaning that a second training/test model is done at the municipality scale to check if the model is a good predictor for different contexts across groups and not just our selected geography. 
+
+## Summary of results:
+
+
+
 ### Data Gathering Methods
 
-For this project, we used the following data sets:
+Table of data sets
 
 | Dataset        | Description    | Open Data URL  | File Type | Location |
 | :------------- | :------------- | :------------- | :------------- | :------------- |
@@ -69,23 +83,11 @@ For this project, we used the following data sets:
 | Boulder County Boundary | Boundary polygon | https://opendata-bouldercounty.hub.arcgis.com/datasets/county-boundary/explore?location=40.088157%2C-105.373097%2C11.58 | geojson | MUSA-508/Midterm |
 | Boulder County Open Spaces | Boundaries for parks and open spaces state and municipally owned | https://opendata-bouldercounty.hub.arcgis.com/datasets/county-open-space/explore?location=40.080100%2C-105.341850%2C11.48&showTable=true | geojson | MUSA-508/Midterm |
 | Roads | Boulder County main freeways and road network | https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson | geojson | "" |
-
-
-
 | Student Data | Homes data for Boulder County (2019-2021) | Provided by MUSA508 instructors | geojson | MUSA-508/Midterm |
 
-
-```{r}
-
-```
-
-
-### Boulder Data and Homes Data 
+### Boulder and Homes Data 
 
 ```{r cars}
-
-# Load census API key
-census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
 
 muni <- 
   st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/Municipalities.geojson") %>%
@@ -107,7 +109,6 @@ boulder.sf <- studentData %>%
          TotalBedrooms = nbrBedRoom, 
          GarageSize = carStorageSF)
 
-
 #State Plane Colorado - ESRI:102653
 #Colorado North - ESRI:102253
 #Colorado Central - ESRI:102254
@@ -115,9 +116,7 @@ boulder.sf <- studentData %>%
 
 ```
 
-### Mappring the dependent variable: price
-
-The following map shows home prices spatially distributed across Boulder County.
+Visualizing home prices spatially distributed across Boulder County.
 
 ```{r Price Map, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -134,15 +133,46 @@ ggplot() +
   mapTheme()
 ```
 
-### Internal Characteristics Selected
+### What internal and external factors influence home value?
 
-Variables of interest: 
-- 
+We selected a few variables that at we believe would be good price predictors for home prices in Boulder County. 
+
+Context for external: 
+Based on the demographics, it is a relatively white county, with over 85% of the population being white. median income rates are also high in about 80k for median income, doubling the national average. This should explain why ownership is higher than rented homes for example. Most people seem to drive to work, and the average commute in the county is 23 minutes. 
+Parks and open spaces are an important highlight of Boulder County as well. These amenities are an attraction to both locals and tourists, probably becoming a strong factor influencing home values relative to their proximity. Physical activity and access to green trails seems important for households in Boulder County. A survey by the Centers for Disease Control found that Colorado had fewer overweight people per capita and more people who exercise than any other state. While most people commute by car to jobs and amenities, it seems that physical activity is described through these natural assets. In a post COVID/work from home scenario, access to these sites might be a strong variable for home price. 
+Based on census and fast facts, education, health and leisure seem a priority for Boulder County citizens. Distance to amenities such as schools, colleges, universities, and restaurants are also considered in this project. 
+
+Homes' internal characteristics:
+Physical characteristics of the homes are important factors for predicting home values. As in appraisals, the quality, age, size, number of bedrooms and bathrooms all influence it valuation. Functioning characteristics such as AC/Heating and plumbing systems also influence price.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(dplyr)
+
+#Summary of Internal Descriptive Characteristics: Non Numeric vs Numeric
+#I want to do 2 tables here to show numeric vs categorical. Divide the 55 column names into the two groups and who that on a table
+
+HomeSummary <- 
+  boulder.sf %>%
+  st_drop_geometry() %>%
+  dplyr::select(price, Size, builtYear) %>%
+  summarize(sum = r(Size)) %>%
+  kable(
+    caption = "Glimpse of Variables to Describe Home Prices in Boulder County", 
+    #col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
+    digits = c(0, 2, 3, 2, 3),
+    align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling()
+    
+summary(boulder.sf)
 
 
+```
 
 
-### Boulder Open Spaces and Roads
+Gathering and Wrangling External Characteristics
+
+Open Spaces in County
 
 ```{r Open and Roads, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -155,7 +185,7 @@ openspace <-
 
 ```
 
-### Roads 
+Roads MState and Municipal
 
 ```{r}
 #Grab road data set
@@ -253,24 +283,17 @@ ggplot()+
 
 ### OSM Data for Boulder County
 
-Grab OSM data for Boulder County
-Check out the wiki for the key/value pairs for different amenities - that lets you #figure out what you can call from OSM #https://wiki.openstreetmap.org/wiki/Category:Tag_descriptions_by_value
-
-set bounding box - the maximum x-y extent you are interested in
+Open Street Map
 
 ```{r OSM, echo=FALSE}
 install.packages("osmdata")
 library(osmdata)
 library(tigris)
 
-
-# Do some right-clicking in google maps to figure this out
-q0 <- opq(bbox = c(-75.3,39.85,-74.9,40.15)) #bounding box for philly
-q0 <- opq(bbox = c(-105.21,36.00,40.05,24.00)) #bounding box for boulder
 q0 <- opq(bbox = c("Boulder County")) #bounding box for boulder
 
 
-# Parks
+#---- Parks ----
 park <- add_osm_feature(opq = q0, key = 'leisure', value = "park") %>%
   osmdata_sf(.)
 
@@ -283,38 +306,52 @@ park.sf <- st_geometry(park$osm_polygons) %>%
 # Park Centroids
 parks_sf_cent <- st_centroid(park.sf)
 
-#Counts of parks per buffer of home price
-boulder.sf$parks.buffer =
-    st_buffer(boulder.sf, 804.672) %>% 
-    aggregate(mutate(parks_sf_cent, counter = 1),., sum) %>%
-    pull(counter)
-#Keeps giving me this error but not sure how to fix it...Error in st_geos_binop("intersects", #  x, y, sparse = sparse, prepared = prepared,  : 
-#  st_crs(x) == st_crs(y) is not TRUE
+#Nearest neighbor distance for Parks
+st_c <- st_coordinates
+
+boulder.sf <-
+  boulder.sf %>% 
+    mutate(
+      parks_nn1 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 1),
+      parks_nn2 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 2),
+      parks_nn3 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 3),
+      parks_nn4 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 4),
+      parks_nn5 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 5))
 
 
-# Transportation - Subway
-subway <- add_osm_feature(opq = q0, key = 'railway', value = "subway") %>%
+# ----- Schools + Universities----
+
+schools <- 
+  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/Schools_Boulder.shp") %>%
+  st_transform('ESRI:102653')
+
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      schools_nn1 = nn_function(st_c(boulder.sf), st_c(schools), 1),
+      schools_nn2 = nn_function(st_c(boulder.sf), st_c(schools), 2), 
+      schools_nn3 = nn_function(st_c(boulder.sf), st_c(schools), 3), 
+      schools_nn4 = nn_function(st_c(boulder.sf), st_c(schools), 4), 
+      schools_nn5 = nn_function(st_c(boulder.sf), st_c(schools), 5)) 
+
+uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
   osmdata_sf(.)
-subway.sf <- st_geometry(subway$osm_lines) %>%
+uni.sf <- st_geometry(uni$osm_points) %>%
   st_transform(4326) %>%
   st_sf() %>%
-  cbind(., subway$osm_lines$name) %>%
-  rename(NAME = subway.osm_lines.name) %>%
-  filter(NAME %in% c("Market-Frankford Line", "Broad Street Line"))
+  cbind(., uni$osm_points$osm_id) %>% 
+  rename(NAME = uni.osm_points.osm_id)
 
-# Amenities - Restaurant
-# Check in the attributes of `restaurant` and see what the different
-# variables and values are.
-# These data seem really shaky by the way
-restaurant <- add_osm_feature(opq = q0, key = 'amenity', value = "restaurant") %>%
-  osmdata_sf(.)
-restaurant.sf <- st_geometry(restaurant$osm_points) %>%
-  st_transform(4326) %>%
-  st_sf() %>%
-  cbind(., restaurant$osm_points$amenity) %>%
-  rename(NAME = restaurant.osm_points.amenity)
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      uni_nn1 = nn_function(st_c(boulder.sf), st_c(uni.sf), 1),
+      uni_nn2 = nn_function(st_c(boulder.sf), st_c(uni.sf), 2), 
+      uni_nn3 = nn_function(st_c(boulder.sf), st_c(uni.sf), 3), 
+      uni_nn4 = nn_function(st_c(boulder.sf), st_c(uni.sf), 4), 
+      uni_nn5 = nn_function(st_c(boulder.sf), st_c(uni.sf), 5)) 
 
-# Amenities - Hospitals + Clinics
+# ----- Hospitals + Clinics ----
 hospitals <- add_osm_feature(opq = q0, key = 'amenity', value = "hospital") %>%
   osmdata_sf(.)
 hospitals.sf <- st_geometry(hospitals$osm_points) %>%
@@ -334,47 +371,66 @@ clinics.sf <- st_geometry(clinics$osm_points) %>%
 
 healthcare <- rbind(hospitals.sf,clinics.sf)
 
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      healthcare_nn1 = nn_function(st_c(boulder.sf), st_c(healthcare), 1),
+      healthcare_nn2 = nn_function(st_c(boulder.sf), st_c(healthcare), 2), 
+      healthcare_nn3 = nn_function(st_c(boulder.sf), st_c(healthcare), 3), 
+      healthcare_nn4 = nn_function(st_c(boulder.sf), st_c(healthcare), 4), 
+      healthcare_nn5 = nn_function(st_c(boulder.sf), st_c(healthcare), 5)) 
 
-# Amenities - Education (Schools, Colleges, Universities)
-schools <- add_osm_feature(opq = q0, key = 'amenity', value = "school") %>%
+#---- Restaurants -----
+restaurant <- add_osm_feature(opq = q0, key = 'amenity', value = "restaurant") %>%
   osmdata_sf(.)
-schools.sf <- st_geometry(schools$osm_points) %>%
+restaurant.sf <- st_geometry(restaurant$osm_points) %>%
   st_transform(4326) %>%
   st_sf() %>%
-  cbind(., schools$osm_points$amenity) %>%
-  rename(NAME = schools.osm_points.amenity)
+  cbind(., restaurant$osm_points$amenity) %>%
+  rename(NAME = restaurant.osm_points.amenity)
 
-uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
-  osmdata_sf(.)
-uni.sf <- st_geometry(uni$osm_points) %>%
-  st_transform(4326) %>%
-  st_sf() %>%
-  cbind(., uni$osm_points$osm_id) %>% 
-  rename(NAME = uni.osm_points.osm_id)
+boulder.sf <-
+  boulder.sf  %>% 
+    mutate(
+      restaurants_nn1 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 1),
+      restaurants_nn2 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 2), 
+      restaurants_nn3 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 3), 
+      restaurants_nn4 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 4), 
+      restaurants_nn5 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 5)) 
 
-education <- rbind(schools.sf,uni.sf) 
-
-# Add the features for Boulder County
-# You can use this to clip things if it's necessary
-coCounties <- counties(state = 'CO', cb = FALSE)
-
-boulder <- coCounties %>%
-  filter(NAME == "Boulder") %>%
-  st_as_sf() %>%
-  st_transform(4326)
+#---- Points of Interest POI -----
 
 
-#Visualize it
-ggplot() +
-  geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data = schools.sf, aes(colour = "#ffcdb2"), show.legend = FALSE, size = .25) +
-  labs(title="Parks in Boulder County") +
-  mapTheme()
+#---- Wildfires -----
 
+
+#Map of external characteristics // or summary table, however works best
+## Home Buffer
+
+#A 5 mile buffer is created from Boulder homes. Graphical purposes only
+BoHomeBuffers <- 
+  rbind(
+    st_buffer(boulder.sf, 2640) %>%
+      mutate(Legend = "5mi Buffer") %>%
+      dplyr::select(Legend),
+  st_union(st_buffer(boulder.sf, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+Unioned_buffer <- filter(BoHomeBuffers, Legend=="Unioned Buffer")
+
+ggplot()+
+  geom_sf(data = boulder, color = "black")+
+  scale_color_manual(values = c("orange", "blue"))+
+  geom_sf(data = park.sf, fill = "light green", color = "transparent")+
+  geom_sf(data = restaurant.sf, color = "red", size = 0.2, alpha = 0.2)
 
 ```
 
-## Census Data
+## Using Demographic Data as descriptor
+
+Retrieved from US Census Bureau. ACS 2019 5 year
+
 ```{r message=FALSE, warning=FALSE}
 # Load census API key
 census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
@@ -382,81 +438,31 @@ census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrit
 #Load list of variables
 acs_variable_list.2019 <- load_variables(2019,"acs5")
 
-#Variables to test from Census:
-#pctBachelor: B06009_005
-#WorkedFromHome: B99087_005
-#Age: B01002_001
+
+#Year 2019 tracts
+tracts19 <-  
+  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E"),
+          year=2019, state=08, county=013, geometry=T) %>% 
+  st_transform('ESRI:102653')
+
+tracts19 <- 
+  tracts19 %>%
+  select( -NAME, -moe) %>%
+  spread(variable, estimate) %>%
+  select(-geometry) %>%
+  rename(TotalPop = B25026_001, 
+         MedHHInc = B19013_001, 
+         )
+
+#point to polygon spatial join
 
 
 ```
 
-
-
-## Summary Statistics: Physical variables, Amenities, and Spatial Process
-
-```{r}
-
-#Data selection step
-
-#Distance to Parks & Open Spaces
-
-#Distance to Restaurants
-
-#Distance to Roads
-
-#Distance to Subway
-
-#Distance to Educational Institutions
-
-#Distance to Healthcare Facilities
-
-```
-
-## Home Buffer
-```{r}
-
-#A 5 mile buffer is created from Boulder homes 
-BoHomeBuffers <- 
-  rbind(
-    st_buffer(boulder.sf, 804.672) %>%
-      mutate(Legend = "5mi Buffer") %>%
-      dplyr::select(Legend),
-  st_union(st_buffer(boulder.sf, 804.672)) %>%
-      st_sf() %>%
-      mutate(Legend = "Unioned Buffer"))
-
-
-#Home MRBuffer to measure distance from roads
-Unioned_buffer <- filter(BoHomeBuffers, Legend=="Unioned Buffer")
-```
-
-
-## Defining Correlation to continuous variables using nearest nn function 
-```{r}
-boulder.sf$parks.Buffer =
-    st_buffer(boulder.sf, 660) %>% 
-    aggregate(mutate(parks_sf_cent, counter = 1),., sum) %>%
-    pull(counter)
-
-#Nearest neighbor function
-st_c <- st_coordinates
-
-boulder.sf <-
-  boulder.sf %>% 
-    mutate(
-      parks_nn1 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 1),
-      parks_nn2 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 2),
-      parks_nn3 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 3),
-      parks_nn4 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 4),
-      parks_nn5 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 5))
-
-
-```
-
-```{r  echo=FALSE, message=FALSE, warning=FALSE}
-```
 
 ## Exploratory Analysis: Correlation Plots
+
+The Exploratory Analysis here helped us understand which variables (internal and external; numeric or categorical) are positively correlated to price change. 
 
 ```{r correlation pt 1 echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -466,7 +472,7 @@ boulder.sf <-
   #labs(title = "Price as a function of Size", y = "Price") +
   #plotTheme()
 
-#Home Characteristics Corr Plots
+#Internal Characteristics Corr Plots
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2015 - builtYear) %>%
   dplyr::select(price, Size, Age, TotalBedrooms, GarageSize, ) %>%
@@ -478,6 +484,8 @@ st_drop_geometry(boulder.sf) %>%
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
 ```
+In the plot above, we see how price increases as age decreases, and how the number of bedrooms, overall size and garage space are positively correlated to price increase. Looking at non numeric attributes of the home might shed better light into understanding why age is negatively correlated to price. A general assumption here could be that architectural styles in this County are not historically valuable to appraisers. Meaning that age may not add historical value to a property as much as the other commodities do. 
+
 ```{r correlation pt. 2 echo=FALSE, message=FALSE, warning=FALSE}
 
 st_drop_geometry(boulder.sf) %>% 
@@ -491,12 +499,13 @@ st_drop_geometry(boulder.sf) %>%
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
 ```
+This is a second correlation plot though, shows other specific commodities such as main floor size and total bathrooms can positively influence price, while infrastructure such as Ac or Heating might negatively influence price. 
 
-### Correlation to Categorical Variables
+### Correlation to Categorical Variables 
 
 Price as a function of non numeric variables
 
-```{r}
+```{r Non numeric}
 
 st_drop_geometry(boulder.sf) %>% 
   dplyr::select(price, designCodeDscr, ConstCodeDscr, IntWallDscr) %>%
@@ -509,6 +518,8 @@ st_drop_geometry(boulder.sf) %>%
      plotTheme() + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 ```
+
+
 ### Regressions for determining correlation strength
 
 Internal characteristics of homes
@@ -539,7 +550,7 @@ stargazer(reg1, type = "html",
 ```
 
 
-```{r}
+```{r Linear regressions}
 head(boulder.sf)
 
 reg2 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
@@ -583,7 +594,7 @@ boulder.sf %>%
 ```
 
 
-## Correlation Matrix
+### Correlation Matrix
 
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 
@@ -687,4 +698,28 @@ st_drop_geometry(bothRegressions) %>%
 In class, we discussed the concept of generalizability
 
 
+
+
+
+### Misc
+
+```{r}
+# Add the features for Boulder County
+# You can use this to clip things if it's necessary
+coCounties <- counties(state = 'CO', cb = FALSE)
+
+boulder <- coCounties %>%
+  filter(NAME == "Boulder") %>%
+  st_as_sf() %>%
+  st_transform(4326)
+
+
+schools <- add_osm_feature(opq = q0, key = 'amenity', value = "school") %>%
+  osmdata_sf(.)
+schools.sf <- st_geometry(schools$osm_points) %>%
+  st_transform(4326) %>%
+  st_sf() %>%
+  cbind(., schools$osm_points$amenity) %>%
+  rename(NAME = "School")
+```
 
