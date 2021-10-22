@@ -164,14 +164,15 @@ roads.sf <-
   st_transform('ESRI:102653') %>% 
   dplyr::select(OBJECTID, STREET_NAME, SPECIFIC_CATEGORY, geometry) %>%
   filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary")) %>%
-
-
+  
 ggplot() +
   geom_sf(data = boulderCounty, fill = "grey90") +
   geom_sf(data = clip, aes(colour = SPECIFIC_CATEGORY)) +
   labs(title="Boulder County Roads") +
   mapTheme()
 
+
+#Distance to roads
 boulder.sf <-
   boulder.sf %>%
     mutate(
@@ -190,12 +191,18 @@ roadBuffer <-
 
 Unioned_buffer <- filter(roadBuffer, Legend=="Unioned Buffer")
 
-boulder.sf <- 
-  st_join(boulder.sf, Unioned_buffer,join = st_intersects,
-  #suffix = c(".x", ".y"),
-  left = TRUE, largest = FALSE)
-    
-ls1 = roads.sf[]
+MRBufferRoads <-
+  st_join(
+    dplyr::select(boulder.sf, price, builtYear),
+    multipleRingBuffer(Unioned_buffer,10000,2640)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(boulder.sf, price, builtYear),
+            by=c("price" = "price", "builtYear" = "builtYear")) %>%
+  st_sf() %>%
+  replace_na(list(distance = 0))%>% 
+  mutate(distance = distance+2640)
+
+summary(MRBufferRoads$distance)
 
 boulder.sf <- 
   rbind(
@@ -210,17 +217,32 @@ boulder.sf <-
       st_sf() %>%
       mutate(TOD = "Non-TOD"))
 
-ggplot() +
-  geom_sf(data = boulderCounty, fill = "grey90") +
-  #geom_sf(data = roads.sf, fill = "black") +
-  geom_sf(data = Unioned_buffer, fill = NA) +
-  geom_sf(data = boulder.sf, aes(colour = q5(roads_n)), 
+# ggplot() +
+#   geom_sf(data = boulderCounty, fill = "grey90") +
+#   #geom_sf(data = roads.sf, fill = "black") +
+#   #geom_sf(data = Unioned_buffer, fill = NA) +
+#   geom_sf(data=multipleRingBuffer(Unioned_buffer,10000,2640),fill= NA) +
+#   geom_sf(data = boulder.sf, aes(colour = q5(price)), 
+#           show.legend = "point", size = .5) +
+#   scale_color_manual(values = palette5,
+#                    labels = qBr(boulder.sf, "price"),
+#                    name = "Quintile\nBreaks") +
+#   #geom_sf_label(data = muni, aes(label = ZONEDESC), size = 2) +
+#   labs(title="Distances of Homes to Roads") +
+#   mapTheme()
+
+
+ggplot()+
+  geom_sf(data= boulderCounty, fill = "grey90") +
+  geom_sf(data= MRBufferRoads, aes(colour = q5(distance)), 
           show.legend = "point", size = .5) +
-  scale_color_manual(values = palette5,
-                   labels = qBr(boulder.sf, "roads_n"),
-                   name = "Quintile\nBreaks") +
-  geom_sf_label(data = muni, aes(label = ZONEDESC), size = 2) +
-  labs(title="Distances of Homes to Roads in meters") +
+  scale_fill_manual(values = palette5,
+                    labels = qBr(MRBufferRoads, "distance"),
+                    name = "Distance\n(Quintile Breaks)") +
+  labs(
+    title = "Distance to State and municipal roads",
+    #subtitle = "Buffer is areas within 0.5 mile from MBTA Stops"
+    ) +
   mapTheme()
 
 ```
@@ -582,6 +604,10 @@ ggcorrplot(
 
 ## Mean absolute error MAE by Municipality
 
+The municipality effects accounts for the mean of prices if the values from price to prediction are equal, meaning that other categorical features might be good for price prediction. 
+
+Summary of reg.nhood will indicte if municipality is highly significant here. 
+
 ```{r}
 
 #Grouping prediction data by muni
@@ -655,4 +681,10 @@ st_drop_geometry(bothRegressions) %>%
 
 
 ```
+
+## Generalizability of the models in this project
+
+In class, we discussed the concept of generalizability
+
+
 
