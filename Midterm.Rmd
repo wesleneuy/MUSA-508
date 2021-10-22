@@ -129,7 +129,7 @@ ggplot() +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "price"),
                    name = "Quintile\nBreaks") +
-  #geom_sf_text(data = muni, aes(text = rownames(ZONEDESC)), size = 2) +
+  geom_sf_label(data = muni, aes(label = ZONEDESC), size = 2) +
   labs(title="Gross Home Prices in Boulder County") +
   mapTheme()
 ```
@@ -158,11 +158,11 @@ roads.sf <-
   st_transform('ESRI:102653') %>% 
   dplyr::select(OBJECTID, STREET_NAME, SPECIFIC_CATEGORY, geometry) %>%
   filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary"))
-
+  
 
 ggplot() +
   geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data = roads, aes(colour = SPECIFIC_CATEGORY)) +
+  geom_sf(data = clip, aes(colour = SPECIFIC_CATEGORY)) +
   labs(title="Boulder County Roads") +
   mapTheme()
 
@@ -268,8 +268,8 @@ uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
 uni.sf <- st_geometry(uni$osm_points) %>%
   st_transform(4326) %>%
   st_sf() %>%
-  cbind(., uni$osm_points$amenity, ) %>% #cbind is giving me an error, not sure how to fix it: arguments imply differing number of rows: 400, 0.
-  rename(NAME = uni.osm_points.amenity)
+  cbind(., uni$osm_points$osm_id) %>% #cbind is giving me an error, not sure how to fix it: arguments imply differing number of rows: 400, 0.
+  rename(NAME = uni.osm_points.osm_id)
 
 education <- rbind(schools.sf,uni.sf) #because uni.sf doesn't have the NAME column the rbind cannot be made as in healthcare
 
@@ -289,8 +289,6 @@ ggplot() +
   geom_sf(data = schools.sf, aes(colour = "#ffcdb2"), show.legend = FALSE, size = .25) +
   labs(title="Parks in Boulder County") +
   mapTheme()
-
-
 
 
 ```
@@ -362,7 +360,6 @@ boulder.sf$parks.Buffer =
 #Nearest neighbor function
 st_c <- st_coordinates
 
-
 boulder.sf <-
   boulder.sf %>% 
     mutate(
@@ -373,18 +370,67 @@ boulder.sf <-
       parks_nn5 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 5))
 
 
+```
+
+```{r Distance to Roads echo=FALSE, message=FALSE, warning=FALSE}
+
+boulder.sf <-
+  boulder.sf %>%
+    mutate(
+      roads_n = st_nearest_feature(boulder.sf,roads.sf,check_crs = TRUE,longlat =
+                                isTRUE(st_is_longlat(boulder.sf))))
+
+#Buffer distance
+roadBuffer <- 
+  rbind(
+    st_buffer(roads.sf, 2640) %>%
+      mutate(Legend = "1/2mi Buffer") %>%
+      dplyr::select(Legend),
+  st_union(st_buffer(roads.sf, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+Unioned_buffer <- filter(roadBuffer, Legend=="Unioned Buffer")
+
+MRBuffer <-
+  st_join(
+    st_centroid(dplyr::select(boulder.sf, geometry, price, builtYear)),
+    multipleRingBuffer(Unioned_buffer,10000,26400)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(boulder.sf, price, builtYear),
+            by=c("price"="price")) %>%
+  st_sf() %>%
+  replace_na(list(distance = 0))%>% 
+  mutate(distance = distance+26400)
+
+boulder.sf <- 
+  rbind(
+    st_centroid(boulder.)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD"))
+
 ggplot() +
   geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data=Unioned_buffer, fill = NA) +
-  geom_sf(data = boulder.sf, aes(colour = q5(price)), 
-          show.legend = "point", size = .75) +
-  scale_colour_manual(values = palette5,
-                   labels=qBr(boulder.sf,"Price"),
-                   name="Quintile\nBreaks") +
-  labs(title="Home Price Buffer: 5 mile. Boulder County") +
+  #geom_sf(data = roads.sf, fill = "black") +
+  geom_sf(data = Unioned_buffer, fill = NA) +
+  #geom_sf(data = boulder.sf, aes(colour = q5(roads_n)), 
+          #show.legend = "point", size = .5) +
+  #scale_color_manual(values = palette5,
+   #                labels = qBr(boulder.sf, "roads_n"),
+    #               name = "Quintile\nBreaks") +
+  #geom_sf_label(data = muni, aes(label = ZONEDESC), size = 2) +
+  labs(title="Distances of Homes to Roads in meters") +
   mapTheme()
 
 ```
+
 
 ## Exploratory Analysis: Correlation Plots
 
