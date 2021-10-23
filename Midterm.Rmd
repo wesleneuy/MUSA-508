@@ -759,11 +759,11 @@ predicted.price
 
 
 
-## By Municipality
+## Testing model accuracy: Price predictions by Census Tracts
 
-The municipality effects accounts for the mean of prices if the values from price to prediction are equal, meaning that other categorical features might be good for price prediction. 
+The tracts effects accounts for the mean of prices if the values from price to prediction are equal, meaning that other categorical features might be good for price prediction. 
 
-Summary of reg.nhood will indicte if municipality is highly significant here. 
+Summary of reg.tracts will indicate if census tracts is highly significant here. 
 
 ```{r}
 
