@@ -382,10 +382,6 @@ boulder.sf$wildfires =
 boulder.sf <-
   st_join(boulder.sf, geohazards)
 
-boulder.sf <-
-  boulder.sf %>%
-  rename(Interiority = IntWallDscr)
-
 ```
 ```{r}
 
@@ -477,18 +473,18 @@ Price as a function of non numeric variables. In the plots above, we see how pri
 ```{r Non numeric}
 
 st_drop_geometry(boulder.sf) %>% 
-  dplyr::select(price, BuildingType, Quality, Material, Interiority) %>%
+  dplyr::select(price, BuildingType, Quality, Construction, Internal) %>%
   filter(price <= 1000000) %>%
   gather(Variable, Value, -price) %>% 
    ggplot(aes(Value, price)) +
      geom_bar(position = "dodge", stat = "summary", fun.y = "mean", scientific = FALSE) +
-     facet_wrap(~Variable, ncol = 3, scales = "free") +
+     facet_wrap(~Variable, ncol = 2, scales = "free") +
      labs(title = "Price as a function of categorical variables", y = "Mean_Price") +
      plotTheme() + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 ```
 
-As you can see on the bar plots categorical variables influence price increase significantly. Building typology, material, interiority, and the quality rate from appraisals determine price strongly. While building type and material might be good features to use in a prediction model, quality should be used cautiously, as there is a level of bias in appraisals that the data may not reflect.
+As you can see on the bar plots, categorical variables influence price increase significantly. Building typology, material, interiority, and the quality rate from appraisals determine price strongly. While building type and material might be good features to use in a prediction model, quality should be used cautiously, as there is a level of bias in appraisals that the data may not reflect.
 
 ### Correlation to external features
 
@@ -512,10 +508,10 @@ boulder.sf %>%
 
 ```{r}
 
-#Distance to amenities
+#Correlation to other external characteristics
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2015 - builtYear) %>%
-  dplyr::select(price, Age, TotalPop, MedHHInc, trails_nn1, schools_nn1, restaurant_nn1) %>%
+  dplyr::select(price, Age, TotalPop, WhitePop, MedHHInc, medianage, trails_nn1, schools_nn1, restaurant_nn1, university_nn5, healthcare_nn1) %>%
   filter(price <= 1000000, Age < 500) %>%
   gather(Variable, Value, -price) %>% 
   ggplot(aes(Value, price)) +
@@ -530,7 +526,7 @@ Additional variables that we looked at are
 
 ### Regressions for determining correlation strength 
 
-Internal characteristics of homes
+Statistical significance of size
 ```{r}
 reg1 <- lm(price ~ Size, data = boulder.sf)
 
@@ -549,45 +545,106 @@ reg1 %>%
     
 summary(reg1)
 
-
 #Table 1 (Stargazer)
 stargazer(reg1, type = "html", 
           dep.var.labels=c("Price total"),
           covariate.labels=c("Size in sqm"))
 
 ```
+The following two regressions test significance of multiple internal features and then several external features we engineered in the previous part of this exercise.
 
-
-```{r Linear regressions}
+```{r Internal Features Regression}
 head(boulder.sf)
 
 reg2 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
-                                 dplyr::select(price, Size, builtYear, GarageSize, 
-                                               Material,
-                                               TotalBedrooms, TotalBathrooms))
+                                 dplyr::select(price, Size, builtYear, 
+                                               Construction, BuildingType, Internal, Quality,
+                                               TotalBedrooms, TotalBathrooms
+                                               ))
 summary(reg2)
 
-
-
-reg3 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
-                                 dplyr::select(price, Size, builtYear, 
-                                               TotalBedrooms, TotalBathrooms, 
-                                               parks_nn1, parks_nn2, university_nn1))
-summary(reg3)
-
-#Coefficients of all models
-plot_summs(reg1, reg3, reg2)
+reg2 %>%
+  tidy() %>%
+  kable(
+    caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
+    Boulder County", 
+    col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
+    digits = c(0, 2, 3, 2, 3),
+    align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling() %>%
+  footnote(general = "Adjusted R-squared:  0.4114")
 
 ```
 
 
+```{r External Features Regression}
+
+reg3 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
+                                 dplyr::select(price, Size, builtYear, 
+                                               Construction, BuildingType, Quality,
+                                               TotalBedrooms, TotalBathrooms, MedHHInc, TotalPop,
+                                               WhitePop, medianage))
+summary(reg3)
+
+
+reg3 %>%
+  tidy() %>%
+  kable(
+    caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
+    Boulder County", 
+    col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
+    digits = c(0, 2, 3, 2, 8),
+    align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling() %>%
+  footnote(general = "Adjusted R-squared:  0.422")
+
+
+#Coefficients of all models
+plot_summs(reg1, reg3, reg2)
+```
+
+The above model shows how including demographic features such as HH Income, Population, Age and Race add greater significance to the overall regression.
+
+```{r}
+
+reg4 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
+                                 dplyr::select(price, Size, builtYear, 
+                                               Construction, BuildingType, Quality,
+                                               TotalBedrooms, TotalBathrooms, MedHHInc, TotalPop,
+                                               WhitePop, medianage, parks_nn1, parks_nn3,
+                                               schools_nn1, schools_nn3, schools_nn5, 
+                                               university_nn1, libraries_nn1,
+                                               healthcare_nn3, trails_nn3,
+                                               restaurant_nn1,
+                                               marijuanaestablishments_nn1, 
+                                               marijuanaestablishments_nn2,
+                                               marijuanaestablishments_nn5, sceniccorridor))
+
+summary(reg4)
+
+reg4 %>%
+  tidy() %>%
+  kable(
+    caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
+    Boulder County", 
+    col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
+    digits = c(0, 2, 3, 2, 8),
+    align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling() %>%
+  footnote(general = "Adjusted R-squared:  0.4955")
+
+```
+When adding many external features and amenities (ie, parks, schools, university and trails, etc), the adjusted r-squared value is telling us that 50% of the variables in this list could be statistically significant to price. 
 
 ### Correlation Matrix
 
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 
 corrplot <- st_drop_geometry(boulder.sf) %>% 
-  select(price, TotalBathrooms, Size, TotalBedrooms, GarageSize, MedHHInc, TotalPop, parks_nn1, trails_nn1, schools_nn1, healthcare_nn1, restaurant_nn1,starts_with(c("university","marijuanaestablishments"))) %>% na.omit(na.action = "omit")
+  select(price, Size, TotalBathrooms, TotalBedrooms, GarageSize, MedHHInc, TotalPop, medianage, WhitePop, parks_nn1, trails_nn1, schools_nn1, libraries_nn1, university_nn1, healthcare_nn1, restaurant_nn1, marijuanaestablishments_nn1, sceniccorridor) %>% na.omit(na.action = "omit")
 
 ggcorrplot(
   round(cor(corrplot), 1), 
@@ -597,7 +654,6 @@ ggcorrplot(
   type="lower",
   insig = "blank") +  
     labs(title = "Correlation across numeric variables")
-
 
 ```
 
