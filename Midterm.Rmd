@@ -17,21 +17,6 @@ This project is...
 
 The following libraries are needed in for this model:
 
-library(tidyverse)
-library(tidycensus)
-library(sf)
-library(spdep)
-library(caret)
-library(ckanr)
-library(FNN)
-library(grid)
-library(gridExtra)
-library(ggcorrplot)
-library(kableExtra)
-library(jtools) 
-library(ggstance) 
-library(stargazer)
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -115,11 +100,7 @@ boulder.sf <- housingData %>%
          Quality = qualityCodeDscr,
          YearBuilt = EffectiveYear,
          Material = ConstCodeDscr,
-         Interiority = IntWallDscr) %>%
- #select(boulder.sf, price, pricesqft, Size, TotalBedrooms, GarageSize, 
-                #BuildingType, Quality, YearBuilt, Material, ToPredict)
-
-#filter boulder.sf with specific variables of interest
+         Interiority = IntWallDscr)
 
 #State Plane Colorado - ESRI:102653
 #Colorado North - ESRI:102253
@@ -186,7 +167,7 @@ Gathering and Wrangling External Characteristics
 
 Open Spaces in County
 
-```{r Open and Roads, echo=FALSE, message=FALSE, warning=FALSE}
+```{r Open Space, echo=FALSE, message=FALSE, warning=FALSE}
 
 #Grab open space data set
 openspace <- 
@@ -199,7 +180,7 @@ openspace <-
 
 Roads State and Municipal
 
-```{r}
+```{r Roads, echo=FALSE, message=FALSE, warning=FALSE}
 #Grab road data set
 roads.sf <-
   st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson") %>%
@@ -321,17 +302,15 @@ marijuanaestablishments <-
 
 #---- Parks ----
 
-park <- add_osm_feature(opq = q0, key = 'leisure', value = "park") %>%
+parks <- add_osm_feature(opq = q0, key = 'leisure', value = "park") %>%
   osmdata_sf(.)
 
-park.sf <- st_geometry(park$osm_polygons) %>%
+parks.sf <- st_geometry(parks$osm_polygons) %>%
   st_as_sf(crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102286') %>%
-  cbind(., park$osm_polygons$name) %>%
-  rename(NAME = park.osm_polygons.name, geometry = "x")
-
-# Park Centroids
-parks_sf_cent <- st_centroid(park.sf)
+  cbind(., parks$osm_polygons$name) %>%
+  rename(NAME = parks.osm_polygons.name, geometry = "x") %>%
+  st_centroid()
 
 
 # ----- Schools + Universities----
@@ -426,11 +405,11 @@ boulder.sf <-
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
-      marijuanaesttablishments_nn1 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 1),
+      marijuanaestablishments_nn1 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 1),
       marijuanaestablishments_nn2 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 2), 
       marijuanaestablishments_nn3 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 3), 
-      marijuanaestablishments = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 4), 
-      marijuanaestablishments = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 5))
+      marijuanaestablishments_nn4 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 4), 
+      marijuanaestablishments_nn5 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 5))
 
 #schools (elementary school, middle school, high school)
 boulder.sf <-
@@ -453,15 +432,15 @@ boulder.sf <-
       university_nn5 = nn_function(st_c(boulder.sf), st_c(university.sf), 5)) 
 
 # Parks
-parks.sf <- st_centroid(parks)
+# I moved the centroids function to the upper section
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
       parks_nn1 = nn_function(st_c(boulder.sf), st_c(parks.sf),1),
-      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 2), 
-      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 3), 
-      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 4), 
-      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 5)) 
+      parks_nn2 = nn_function(st_c(boulder.sf), st_c(parks.sf), 2), 
+      parks_nn3 = nn_function(st_c(boulder.sf), st_c(parks.sf), 3), 
+      parks_nn4 = nn_function(st_c(boulder.sf), st_c(parks.sf), 4), 
+      parks_nn5 = nn_function(st_c(boulder.sf), st_c(parks.sf), 5)) 
 
 #healthcare facilities
 boulder.sf <-
@@ -490,7 +469,7 @@ floodzones <-
  floodzones %>%
  mutate(floodzone = 1)
 boulder.sf <-
-  st_join(boulder.sf, floodzones) 
+  st_join(boulder.sf, floodzones)
 boulder.sf$floodzone =
   ifelse(is.na(boulder.sf$floodzone),0, 1)
 
@@ -737,7 +716,7 @@ boulder.sf %>%
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 
 corrplot <- st_drop_geometry(boulder.sf) %>% 
-  select(price, pricesqft, TotalBathrooms, Size, TotalBedrooms, GarageSize, MedHHInc, TotalPop, parks_nn1, university_nn1, trails_nn1, schools_nn1, healthcare_nn1, )), ) %>% na.omit(na.action = "omit")
+  select(price, pricesqft, TotalBathrooms, Size, TotalBedrooms, GarageSize, MedHHInc, TotalPop, parks_nn1, university_nn1, trails_nn1, schools_nn1, healthcare_nn1, restaurants_nn1) %>% na.omit(na.action = "omit")
 
 ggcorrplot(
   round(cor(corrplot), 1), 
