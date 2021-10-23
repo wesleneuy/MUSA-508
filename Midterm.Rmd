@@ -379,37 +379,37 @@ floodzones <-
  floodzones %>%
  mutate(floodzone = 1)
 
-housingData <-
-  st_join(housingData, floodzones) 
+boulder.sf <-
+  st_join(boulder.sf, floodzones) 
 
 housingData$floodzone =
-  ifelse(is.na(housingData$floodzone),0, 1)
+  ifelse(is.na(boulder.sf$floodzone),0, 1)
 
 #scenic corridor
 sceniccorridor <-
  sceniccorridor %>%
  mutate(sceniccorridor = 1)
 
-housingData <-
-  st_join(housingData, sceniccorridor) 
+boulder.sf <-
+  st_join(boulder.sf, sceniccorridor) 
 
-housingData$sceniccorridor =
-  ifelse(is.na(housingData$sceniccorridor),0, 1)
+boulder.sf$sceniccorridor =
+  ifelse(is.na(boulder.sf$sceniccorridor),0, 1)
 
 #wildfire
 wildfires <-
  wildfires %>%
  mutate(wildfire = 1)
 
-housingData <-
-  st_join(housingData, wildfires) 
+boulder.sf <-
+  st_join(boulder.sf, wildfires) 
 
-housingData$wildfires =
-  ifelse(is.na(housingData$wildfires),0, 1)
+boulder.sf$wildfires =
+  ifelse(is.na(boulder.sf$wildfires),0, 1)
 
 #geohazards
-housingData <-
-  st_join(housingData, geohazards)
+boulder.sf <-
+  st_join(boulder.sf, geohazards)
 ```
 
 ```{r Restaurants, warning=FALSE}
