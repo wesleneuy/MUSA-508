@@ -342,19 +342,6 @@ boulder.sf <-
 
 # Parks
 
-park <- add_osm_feature(opq = q0, key = 'leisure', value = "park") %>%
-  osmdata_sf(.)
-
-park.sf <- st_geometry(park$osm_polygons) %>%
-  st_as_sf(crs = 4326, agr = "constant") %>%
-  st_transform('ESRI:102286') %>%
-  cbind(., park$osm_polygons$name) %>%
-  rename(NAME = park.osm_polygons.name, geometry = "x")
-
-
-
-# Park Centroids
-
 parks.sf <- st_centroid(parks)
 
 boulder.sf <-
