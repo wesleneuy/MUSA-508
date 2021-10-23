@@ -6,20 +6,36 @@ output:
   html_document:
     toc: true
     theme: united
+    code_folding: hide
 editor_options: 
   chunk_output_type: console
 ---
 
+# Introduction
 
-## Project Description
+This project aims to develop a model that can predict future home values by using geospatial machine learning processes. We basically deconstruct the different components and constituents that could describe a home and its value. As we know, usually market rate and economic valuation under capitalist systems are based on subjective factors that can be geographically identified. In a national scale, a home's location for example, might influence it's valuation over many other variables. In a more local scale, we could have both cases. First is the clustering of similar price ranges based on similarity across. Second is a differentiated price based on unique qualities of a home in contrast with its closest homes, which is often described with non-numerical factors such as aesthetic value, historical significance, style, materials, etc. 
 
-This project is...
+In this model we mainly focus on the first, but we do not fully dismiss non-numerical characteristics that could help predict future home prices as well. 
 
-The following libraries are needed in for this model:
+
+# Modeling strategy and Methodology:
+
+To develop the model we gathered all the data from Boulder Open Data, Open Street Map and the U.S. Census. We used geojson and API file formats. Secondly, we turned the homes data (provided by the instructors) into an spatial feature dataset that was then joined to the multiple external variables (parks, education, health, roads, hazards, income and age groups to name a few). Following this we did an exploratory analysis of the dataset and visualized the correlation of home prices to both internal and external variables using an ordinary least square (OLS) matrix. We used multivariate regressions to test model's fitness and which variable groups are stronger predictors than other after seeing OLS relationships. Afterwards we splitted the data into a training set (0) and a test set (1), that is then used to predict home sale prices for the Boulder County homes. This is evaluated for generalizability in the end, meaning that a second training/test model is done at the municipality scale to check if the model is a good predictor for different contexts across groups and not just our selected geography. 
+
+# Summary of results:
+
+
+
+
+## Getting Started
+
+The libraries, directory and functions in the code block are needed for this model:
+
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 
+
+knitr::opts_chunk$set(include = FALSE)
 #Libraries needed for this exercise
 library(tidyverse)
 library(tidycensus)
@@ -46,18 +62,6 @@ palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
 
 ```
 
-## Introduction
-
-This project aims to develop a model that can predict future home values by using geospatial machine learning processes. We basically deconstruct the different components and constituents that could describe a home and its value. As we know, usually market rate and economic valuation under capitalist systems are based on subjective factors that can be geographically identified. In a national scale, a home's location for example, might influence it's valuation over many other variables. In a more local scale, we could have both cases. First is the clustering of similar price ranges based on similarity across. Second is a differentiated price based on unique qualities of a home in contrast with its closest homes, which is often described with non-numerical factors such as aesthetic value, historical significance, style, materials, etc. 
-
-In this model we mainly focus on the first, but we do not fully dismiss non-numerical characteristics that could help predict future home prices as well. 
-
-
-## Modeling strategy and Methodology:
-To develop the model we gathered all the data from Boulder Open Data, Open Street Map and the U.S. Census. We used geojson and API file formats. Secondly, we turned the homes data (provided by the instructors) into an spatial feature dataset that was then joined to the multiple external variables (parks, education, health, roads, hazards, income and age groups to name a few). Following this we did an exploratory analysis of the dataset and visualized the correlation of home prices to both internal and external variables using an ordinary least square (OLS) matrix. We used multivariate regressions to test model's fitness and which variable groups are stronger predictors than other after seeing OLS relationships. Afterwards we splitted the data into a training set (0) and a test set (1), that is then used to predict home sale prices for the Boulder County homes. This is evaluated for generalizability in the end, meaning that a second training/test model is done at the municipality scale to check if the model is a good predictor for different contexts across groups and not just our selected geography. 
-
-## Summary of results:
-
 
 
 ### Data Gathering Methods
@@ -69,12 +73,19 @@ Table of data sets
 | Boulder County Municipalities | Boundaries polygons | https://opendata-bouldercounty.hub.arcgis.com/datasets/bouldercounty::municipalities/about | geojson | MUSA-508/Midterm |
 | Boulder County Boundary | Boundary polygon | https://opendata-bouldercounty.hub.arcgis.com/datasets/county-boundary/explore?location=40.088157%2C-105.373097%2C11.58 | geojson | MUSA-508/Midterm |
 | Boulder County Open Spaces | Boundaries for parks and open spaces state and municipally owned | https://opendata-bouldercounty.hub.arcgis.com/datasets/county-open-space/explore?location=40.080100%2C-105.341850%2C11.48&showTable=true | geojson | MUSA-508/Midterm |
-| Roads | Boulder County main freeways and road network | https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson | geojson | "" |
 | Student Data | Homes data for Boulder County (2019-2021) | Provided by MUSA508 instructors | geojson | MUSA-508/Midterm |
+| Libraries | Points of libraries in Boulder County  | https://opendata.arcgis.com/datasets/7f4ea25ba87345e380d2e896611d2588_0.geojson | geojson | Boulder County Open Data | 
+| Restaurants | 5 year ACS 2019 | osmdata package | geojson | OSM |
+| Parks | Parks locations point data | osmdata package | geojson | OSM |
+| Schools | Point data of elementary, middle and high schools | https://www.bouldercounty.org/government/open-data/ | geojson | MUSA-508/Midterm |
+| Universities | 5 year ACS 2019 | osmdata package | geojson | OSM |
+| Healthcare | Clinics and hospitals point data | osmdata package | geojson | OSM |
+| Trails |-----| https://www.bouldercounty.org/government/open-data/ | geojson | MUSA-508/Midterm |
+|  |-----| https://www.bouldercounty.org/government/open-data/ | geojson | MUSA-508/Midterm |
 
-### Boulder and Homes Data 
+### Internal Characteristics: Homes and Boulder Data 
 
-```{r cars}
+```{r Housing and Boulder shp, echo=TRUE, message=FALSE, warning=FALSE}
 
 muni <- 
   st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/Municipalities.geojson") %>%
@@ -126,9 +137,9 @@ ggplot() +
   mapTheme()
 ```
 
-### What internal and external factors influence home value?
+## What internal and external factors influence home value?
 
-We selected a few variables that at we believe would be good price predictors for home prices in Boulder County. 
+We selected a few variables that we believe would be good price predictors for home prices in Boulder County. 
 
 Context for external: 
 Based on the demographics, it is a relatively white county, with over 85% of the population being white. median income rates are also high in about 80k for median income, doubling the national average. This should explain why ownership is higher than rented homes for example. Most people seem to drive to work, and the average commute in the county is 23 minutes. 
@@ -138,138 +149,8 @@ Based on census and fast facts, education, health and leisure seem a priority fo
 Homes' internal characteristics:
 Physical characteristics of the homes are important factors for predicting home values. As in appraisals, the quality, age, size, number of bedrooms and bathrooms all influence it valuation. Functioning characteristics such as AC/Heating and plumbing systems also influence price.
 
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-library(dplyr)
 
-#Summary of Internal Descriptive Characteristics: Non Numeric vs Numeric
-#I want to do 2 tables here to show numeric vs categorical. Divide the 55 column names into the two groups and who that on a table
-
-HomeSummary <- 
-  boulder.sf %>%
-  st_drop_geometry() %>%
-  dplyr::select(price, Size, builtYear) %>%
-  summarize(sum = r(Size)) %>%
-  kable(
-    caption = "Glimpse of Variables to Describe Home Prices in Boulder County", 
-    #col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
-    digits = c(0, 2, 3, 2, 3),
-    align = c("l", "r", "r", "r", "r")
-  ) %>%
-  kable_styling()
-    
-summary(boulder.sf)
-
-
-```
-
-
-Gathering and Wrangling External Characteristics
-
-Open Spaces in County
-
-```{r Open Space, echo=FALSE, message=FALSE, warning=FALSE}
-
-#Grab open space data set
-openspace <- 
-  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/County_Open_Space.geojson") %>%
-  filter(!is.na(PARK_GROUP)) %>%
-  st_transform('ESRI:102653')
-
-
-```
-
-Roads State and Municipal
-
-```{r Roads, echo=FALSE, message=FALSE, warning=FALSE}
-#Grab road data set
-roads.sf <-
-  st_read("https://opendata.arcgis.com/datasets/f8292cbf379e4df7b9b8f62e21120ea7_0.geojson") %>%
-  st_transform('ESRI:102653') %>% 
-  dplyr::select(OBJECTID, STREET_NAME, SPECIFIC_CATEGORY, geometry) %>%
-  filter(SPECIFIC_CATEGORY %in% c("State", "Municipal Primary")) %>%
-  
-ggplot() +
-  geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data = clip, aes(colour = SPECIFIC_CATEGORY)) +
-  labs(title="Boulder County Roads") +
-  mapTheme()
-
-
-#Distance to roads
-boulder.sf <-
-  boulder.sf %>%
-    mutate(
-      roads_n = st_nearest_feature(boulder.sf,roads.sf,check_crs = TRUE,longlat =
-                                isTRUE(st_is_longlat(boulder.sf))))
-
-#Buffer distance
-roadBuffer <- 
-  rbind(
-    st_buffer(roads.sf, 2640) %>%
-      mutate(Legend = "1/2mi Buffer") %>%
-      dplyr::select(Legend),
-  st_union(st_buffer(roads.sf, 2640)) %>%
-      st_sf() %>%
-      mutate(Legend = "Unioned Buffer"))
-
-Unioned_buffer <- filter(roadBuffer, Legend=="Unioned Buffer")
-
-MRBufferRoads <-
-  st_join(
-    dplyr::select(boulder.sf, price, builtYear),
-    multipleRingBuffer(Unioned_buffer,10000,2640)) %>%
-  st_drop_geometry() %>%
-  left_join(dplyr::select(boulder.sf, price, builtYear),
-            by=c("price" = "price", "builtYear" = "builtYear")) %>%
-  st_sf() %>%
-  replace_na(list(distance = 0))%>% 
-  mutate(distance = distance+2640)
-
-summary(MRBufferRoads$distance)
-
-boulder.sf <- 
-  rbind(
-    st_centroid(boulder.sf)[buffer,] %>%
-      st_drop_geometry() %>%
-      left_join(allTracts) %>%
-      st_sf() %>%
-      mutate(TOD = "TOD"),
-    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
-      st_drop_geometry() %>%
-      left_join(allTracts) %>%
-      st_sf() %>%
-      mutate(TOD = "Non-TOD"))
-
-# ggplot() +
-#   geom_sf(data = boulderCounty, fill = "grey90") +
-#   #geom_sf(data = roads.sf, fill = "black") +
-#   #geom_sf(data = Unioned_buffer, fill = NA) +
-#   geom_sf(data=multipleRingBuffer(Unioned_buffer,10000,2640),fill= NA) +
-#   geom_sf(data = boulder.sf, aes(colour = q5(price)), 
-#           show.legend = "point", size = .5) +
-#   scale_color_manual(values = palette5,
-#                    labels = qBr(boulder.sf, "price"),
-#                    name = "Quintile\nBreaks") +
-#   #geom_sf_label(data = muni, aes(label = ZONEDESC), size = 2) +
-#   labs(title="Distances of Homes to Roads") +
-#   mapTheme()
-
-
-ggplot()+
-  geom_sf(data= boulderCounty, fill = "grey90") +
-  geom_sf(data= MRBufferRoads, aes(colour = q5(distance)), 
-          show.legend = "point", size = .5) +
-  scale_fill_manual(values = palette5,
-                    labels = qBr(MRBufferRoads, "distance"),
-                    name = "Distance\n(Quintile Breaks)") +
-  labs(
-    title = "Distance to State and municipal roads",
-    #subtitle = "Buffer is areas within 0.5 mile from MBTA Stops"
-    ) +
-  mapTheme()
-
-```
-  
+## Gathering and Wrangling External Characteristics
 
 ### OSM Data for Boulder County
 
@@ -466,10 +347,13 @@ boulder.sf <-
 
 #floodzones
 floodzones <-
- floodzones %>%
- mutate(floodzone = 1)
+  floodzones %>%
+  mutate(floodzone = 1) %>%
+#  st_sf()
+
 boulder.sf <-
   st_join(boulder.sf, floodzones)
+
 boulder.sf$floodzone =
   ifelse(is.na(boulder.sf$floodzone),0, 1)
 
@@ -489,10 +373,8 @@ boulder.sf <- boulder.sf[-c(84:124)]
 wildfires <-
  wildfires %>%
  mutate(wildfire = 1)
-
 boulder.sf <-
   st_join(boulder.sf, wildfires)
-
 boulder.sf$wildfires =
   ifelse(is.na(boulder.sf$wildfires),0, 1)
 
@@ -602,11 +484,33 @@ st_drop_geometry(boulder.sf) %>%
      facet_wrap(~Variable, ncol = 3, scales = "free") +
      labs(title = "Price as a function of categorical variables", y = "Mean_Price") +
      plotTheme() + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
 ```
 
 As you can see on the bar plots categorical variables influence price increase significantly. Building typology, material, interiority, and the quality rate from appraisals determine price strongly. While building type and material might be good features to use in a prediction model, quality should be used cautiously, as there is a level of bias in appraisals that the data may not reflect.
 
+## Correlation to external features
+
+
 ```{r}
+
+#Price as function of distance to parks
+boulder.sf %>%
+  st_drop_geometry() %>%
+  mutate(Age = 2015 - builtYear) %>%
+  dplyr::select(price, starts_with("parks_")) %>%
+  filter(price <= 1000000) %>%
+  gather(Variable, Value, -price) %>% 
+   ggplot(aes(Value, price)) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, nrow = 1, scales = "free") +
+     labs(title = "Price as a function of Nearest Parks") +
+     plotTheme()
+
+```
+
+```{r}
+
 #Distance to amenities
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2015 - builtYear) %>%
@@ -618,26 +522,14 @@ st_drop_geometry(boulder.sf) %>%
      facet_wrap(~Variable, ncol = 2, scales = "free") +
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
+
 ```
 
 
 Additional variables that we looked at are 
 
-```{r}
-st_drop_geometry(boulder.sf) %>% 
-  mutate(Age = 2015 - builtYear) %>%
-  dplyr::select(price, Age, floodzones, wildfires, geohazards) %>%
-  filter(price <= 1000000, Age < 500) %>%
-  gather(Variable, Value, -price) %>% 
-  ggplot(aes(Value, price)) +
-     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     facet_wrap(~Variable, ncol = 4, scales = "free") +
-     labs(title = "Price as a function of continuous variables") +
-     plotTheme()
-```
 
-
-### Regressions for determining correlation strength
+### Linear Regressions for determining correlation strength 
 
 Internal characteristics of homes
 ```{r}
@@ -691,32 +583,12 @@ plot_summs(reg1, reg3, reg2)
 
 
 
-
-```{r}
-#Parks Correlation
-
-boulder.sf %>%
-  st_drop_geometry() %>%
-  mutate(Age = 2015 - builtYear) %>%
-  dplyr::select(price, starts_with("parks_")) %>%
-  filter(price <= 1000000) %>%
-  gather(Variable, Value, -price) %>% 
-   ggplot(aes(Value, price)) +
-     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-     facet_wrap(~Variable, nrow = 1, scales = "free") +
-     labs(title = "Price as a function of continuous variables: Nearest Parks") +
-     plotTheme()
-
-
-```
-
-
 ### Correlation Matrix
 
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 
 corrplot <- st_drop_geometry(boulder.sf) %>% 
-  select(price, pricesqft, TotalBathrooms, Size, TotalBedrooms, GarageSize, MedHHInc, TotalPop, parks_nn1, university_nn1, trails_nn1, schools_nn1, healthcare_nn1, restaurants_nn1) %>% na.omit(na.action = "omit")
+  select(price, TotalBathrooms, Size, TotalBedrooms, GarageSize, MedHHInc, TotalPop, parks_nn1, trails_nn1, schools_nn1, healthcare_nn1, restaurant_nn1,starts_with(c("university","marijuanaestablishments"))) %>% na.omit(na.action = "omit")
 
 ggcorrplot(
   round(cor(corrplot), 1), 
