@@ -126,7 +126,9 @@ boulder.sf <- housingData %>%
          GarageSize = carStorageSF,
          BuildingType = designCodeDscr,
          Quality = qualityCodeDscr,
-         YearBuilt = EffectiveYear)
+         YearBuilt = EffectiveYear,
+         Construction = ConstCodeDscr,
+         Internal = IntWallDscr)
 ```
 
 #Factors influencing home values
@@ -146,7 +148,6 @@ Based on census and fast facts, education, health and leisure seem a priority fo
 Homes' internal characteristics:
 Physical characteristics of the homes are important factors for predicting home values. As in appraisals, the quality, age, size, number of bedrooms and bathrooms all influence it valuation. Functioning characteristics such as AC/Heating and plumbing systems also influence price.
 
-library(dplyr)
 #Summary of Internal Descriptive Characteristics: Non Numeric vs Numeric
 #I want to do 2 tables here to show numeric vs categorical. Divide the 55 column names into the two groups and who that on a table
 HomeSummary <- 
@@ -191,13 +192,12 @@ q0 <- opq(bbox = c("Boulder County"))
 
 uni <- add_osm_feature(opq = q0, key = 'amenity', value = "university") %>%
   osmdata_sf(.)
+
 uni.sf <- st_geometry(uni$osm_points) %>%
   st_transform(4326) %>%
   st_sf() %>%
   cbind(., uni$osm_points$osm_id) %>% 
   rename(NAME = uni.osm_points.osm_id)
-
-education <- rbind(schools.sf,uni.sf)
 
 # Healthcare - Hospitals + Clinics
 hospitals <- add_osm_feature(opq = q0, key = 'amenity', value = "hospital") %>%
@@ -263,9 +263,9 @@ acs_variable_list.2019 <- load_variables(2019, "acs5")
 
 #Year 2019 tracts 
 tracts19 <-  
-  get_acs(geography = "tract", variables = c("B25026_001E","B19013_001E","B01002_001E", "B02001_002"),
+  get_acs(geography = "tract", variables =     c("B25026_001E","B19013_001E","B01002_001E","B02001_002"),
           year=2019, state=08, county=013, geometry=T) %>% 
-  st_transform('ESRI:102653')
+          st_transform('ESRI:102653')
 
 tracts19 <- 
   tracts19 %>%
@@ -281,7 +281,7 @@ tracts19 <-
   tracts19 %>%
   mutate(pctWhite = ifelse(TotalPop > 0, WhitePop / TotalPop, 0))
 
-demographicvar <- st_join(boulder.sf, tracts19, join = st_within)
+boulder.sf <- boulder.sf %>% mutate(st_join(boulder.sf, tracts19, join = st_within))
             
 ```
 
@@ -289,6 +289,7 @@ demographicvar <- st_join(boulder.sf, tracts19, join = st_within)
 ```{r Data wrangling, warning=FALSE}
 
 ## Nearest Neighbor Feature for amenities
+#libraries
 st_c <- st_coordinates
 
 boulder.sf <-
@@ -299,7 +300,7 @@ boulder.sf <-
       libraries_nn3 = nn_function(st_c(boulder.sf), st_c(libraries), 3), 
       libraries_nn4 = nn_function(st_c(boulder.sf), st_c(libraries), 4), 
       libraries_nn5 = nn_function(st_c(boulder.sf), st_c(libraries), 5)) 
-
+#trails
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
@@ -308,7 +309,7 @@ boulder.sf <-
       trails_nn3 = nn_function(st_c(boulder.sf), st_c(trails), 3), 
       trails_nn4 = nn_function(st_c(boulder.sf), st_c(trails), 4), 
       trails_nn5 = nn_function(st_c(boulder.sf), st_c(trails), 5)) 
-
+#marijuana establishments
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
@@ -316,8 +317,9 @@ boulder.sf <-
       marijuanaestablishments_nn2 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 2), 
       marijuanaestablishments_nn3 = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 3), 
       marijuanaestablishments = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 4), 
-      marijuanaestablishments = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 5)) 
+      marijuanaestablishments = nn_function(st_c(boulder.sf), st_c(marijuanaestablishments), 5))
 
+#schools (elementary school, middle school, high school)
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
@@ -332,11 +334,11 @@ boulder.sf <-
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
-      education_nn1 = nn_function(st_c(boulder.sf), st_c(education), 1),
-      education_nn2 = nn_function(st_c(boulder.sf), st_c(education), 2), 
-      education_nn3 = nn_function(st_c(boulder.sf), st_c(education), 3), 
-      education_nn4 = nn_function(st_c(boulder.sf), st_c(education), 4), 
-      education_nn5 = nn_function(st_c(boulder.sf), st_c(education), 5)) 
+      university_nn1 = nn_function(st_c(boulder.sf), st_c(university), 1),
+      university_nn2 = nn_function(st_c(boulder.sf), st_c(university), 2), 
+      university_nn3 = nn_function(st_c(boulder.sf), st_c(university), 3), 
+      university_nn4 = nn_function(st_c(boulder.sf), st_c(university), 4), 
+      university_nn5 = nn_function(st_c(boulder.sf), st_c(university), 5)) 
 
 # Parks
 
@@ -349,32 +351,22 @@ park.sf <- st_geometry(park$osm_polygons) %>%
   cbind(., park$osm_polygons$name) %>%
   rename(NAME = park.osm_polygons.name, geometry = "x")
 
-## Nearest Neighbor Feature for parks
-st_c <- st_coordinates
+
 
 # Park Centroids
-parks_sf_cent <- st_centroid(park.sf)
+
+parks.sf <- st_centroid(parks)
 
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
-      park_nn1 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 1),
-      park_nn2 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 2), 
-      park_nn3 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 3), 
-      park_nn4 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 4), 
-      park_nn5 = nn_function(st_c(boulder.sf), st_c(parks_sf_cent), 5)) 
+      parks_nn1 = nn_function(st_c(boulder.sf), st_c(parks.sf),1),
+      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 2), 
+      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 3), 
+      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 4), 
+      parks = nn_function(st_c(boulder.sf), st_c(parks.sf), 5)) 
 
-openspace.sf <- st_centroid(openspace)
-
-boulder.sf <-
-  boulder.sf  %>% 
-    mutate(
-      openspace_nn1 = nn_function(st_c(boulder.sf), st_c(openspace.sf),1),
-      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 2), 
-      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 3), 
-      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 4), 
-      openspace = nn_function(st_c(boulder.sf), st_c(openspace.sf), 5)) 
-
+#healthcare facilities
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
@@ -384,6 +376,7 @@ boulder.sf <-
       healthcare_nn4 = nn_function(st_c(boulder.sf), st_c(healthcare), 4), 
       healthcare_nn5 = nn_function(st_c(boulder.sf), st_c(healthcare), 5)) 
 
+#restaurants
 boulder.sf <-
   boulder.sf  %>% 
     mutate(
@@ -392,6 +385,44 @@ boulder.sf <-
       restaurant_nn3 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 3), 
       restaurant_nn4 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 4), 
       restaurant_nn5 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 5)) 
+
+#Disaster risks
+#floodzones
+floodzones <-
+ floodzones %>%
+ mutate(floodzone = 1)
+
+housingData <-
+  st_join(housingData, floodzones) 
+
+housingData$floodzone =
+  ifelse(is.na(housingData$floodzone),0, 1)
+
+#scenic corridor
+sceniccorridor <-
+ sceniccorridor %>%
+ mutate(sceniccorridor = 1)
+
+housingData <-
+  st_join(housingData, sceniccorridor) 
+
+housingData$sceniccorridor =
+  ifelse(is.na(housingData$sceniccorridor),0, 1)
+
+#wildfire
+wildfires <-
+ wildfires %>%
+ mutate(wildfire = 1)
+
+housingData <-
+  st_join(housingData, wildfires) 
+
+housingData$wildfires =
+  ifelse(is.na(housingData$wildfires),0, 1)
+
+#geohazards
+housingData <-
+  st_join(housingData, geohazards)
 ```
 
 ```{r Restaurants, warning=FALSE}
@@ -510,8 +541,7 @@ st_drop_geometry(boulder.sf) %>%
      facet_wrap(~Variable, ncol = 4, scales = "free") +
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
-```
-```{r correlation pt. 2 echo=FALSE, message=FALSE, warning=FALSE}
+
 
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2015 - builtYear) %>%
@@ -523,8 +553,6 @@ st_drop_geometry(boulder.sf) %>%
      facet_wrap(~Variable, ncol = 4, scales = "free") +
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
-```
-```{r distance to amenities echo=FALSE, message=FALSE, warning=FALSE}
 
 #Distance to amenities
 st_drop_geometry(boulder.sf) %>% 
@@ -538,14 +566,15 @@ st_drop_geometry(boulder.sf) %>%
      labs(title = "Price as a function of continuous variables") +
      plotTheme()
 ```
+
 ## Correlation Matrix
 
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 
-numericVars <- 
-  select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit()
+#numericVars <- 
+  #select_if(st_drop_geometry(boulder.sf), is.numeric) %>% na.omit()
 
-corrplot <- boulder.sf %>% select(price)
+corrplot <- st_drop_geometry(boulder.sf) %>% select(price, pricesqft,TotalBathrooms, Size, TotalBedrooms, GarageSize) 
 
 
 ggcorrplot(
