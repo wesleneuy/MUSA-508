@@ -93,7 +93,7 @@ muni <-
   st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/Municipalities.geojson") %>%
   st_transform('ESRI:102653')
 
-studentData <- 
+housingData <- 
   st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/studentData.geojson", crs = 'ESRI:102254') %>%
   st_transform('ESRI:102653')
 
@@ -101,13 +101,19 @@ boulderCounty <-
   st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/County_Boundary.geojson")%>%
   st_transform('ESRI:102653')
 
-boulder.sf <- studentData %>%
+boulder.sf <- housingData %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102653') %>%
-  mutate(TotalBathrooms = nbrThreeQtrBaths + nbrFullBaths + nbrHalfBaths) %>%
+  mutate(pricesqft = ifelse(TotalFinishedSF > 0, (price/TotalFinishedSF), 0),
+    TotalBathrooms = nbrThreeQtrBaths + nbrFullBaths + nbrHalfBaths) %>%
   rename(Size = TotalFinishedSF, 
          TotalBedrooms = nbrBedRoom, 
-         GarageSize = carStorageSF)
+         GarageSize = carStorageSF,
+         BuildingType = designCodeDscr,
+         Quality = qualityCodeDscr,
+         YearBuilt = EffectiveYear)
+
+#filter boulder.sf with specific variables of interest
 
 #State Plane Colorado - ESRI:102653
 #Colorado North - ESRI:102253
@@ -478,7 +484,7 @@ The Exploratory Analysis here helped us understand which variables (internal and
 #Internal Characteristics Corr Plots
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2015 - builtYear) %>%
-  dplyr::select(price, Size, Age, TotalBedrooms, GarageSize, ) %>%
+  dplyr::select(price, Size, Age, TotalBedrooms, GarageSize) %>%
   filter(price <= 1000000, Age < 500) %>%
   gather(Variable, Value, -price) %>% 
   ggplot(aes(Value, price)) +
