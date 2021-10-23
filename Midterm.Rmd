@@ -183,6 +183,10 @@ parks <-
   filter(!is.na(PARK_GROUP)) %>%
   st_transform('ESRI:102653')
 
+lakes <-
+  st_read("https://opendata.arcgis.com/datasets/e0759cd6dc8f4990a04b77a29c988b55_0.geojson") %>%
+  st_transform(st_crs(ESRI:102653))
+
 schools <- 
   st_read("~/GitHub/MUSA-508/Midterm/Schools_Boulder.shp") %>%
   st_transform('ESRI:102653')
@@ -207,7 +211,7 @@ hospitals.sf <- st_geometry(hospitals$osm_points) %>%
   st_transform(4326) %>%
   st_sf() %>%
   cbind(., hospitals$osm_points$amenity) %>%
-  rename(NAME = hospitals.osm_points.amenity) %>%
+  rename(NAME = hospitals.osm_points.amenity)
   #mutate(NAME = is.na(NAME),"hospital")
   
 clinics <- add_osm_feature(opq = q0, key = 'amenity', value = "clinic") %>%
@@ -300,6 +304,7 @@ boulder.sf <-
       libraries_nn3 = nn_function(st_c(boulder.sf), st_c(libraries), 3), 
       libraries_nn4 = nn_function(st_c(boulder.sf), st_c(libraries), 4), 
       libraries_nn5 = nn_function(st_c(boulder.sf), st_c(libraries), 5)) 
+
 #trails
 boulder.sf <-
   boulder.sf  %>% 
@@ -309,6 +314,7 @@ boulder.sf <-
       trails_nn3 = nn_function(st_c(boulder.sf), st_c(trails), 3), 
       trails_nn4 = nn_function(st_c(boulder.sf), st_c(trails), 4), 
       trails_nn5 = nn_function(st_c(boulder.sf), st_c(trails), 5)) 
+
 #marijuana establishments
 boulder.sf <-
   boulder.sf  %>% 
@@ -679,13 +685,24 @@ boulder.test <- bouldert.sf[-inTrain,]
 reg.training <- lm(price ~ ., data = st_drop_geometry(boulder.training) %>% 
                                     dplyr::select(price, Size, builtYear, TotalBedrooms,                                                   TotalBathrooms, bsmtSF, park_nn1,                                                      park_nn2))
 
+#training set regression results
+stargazer(reg.training, type="html", star.cutoffs = c(0.05, 0.01, 0.001), 
+          median=TRUE, title="Table 4.1 Training Set Baseline Regression Results", align=TRUE,
+          single.row=TRUE, digits=2, omit = c("Age", "qualityCode", "ConstCode", "bsmtType",
+                                              "carStorageSF", "nbrBedRoom", "TotalFinishedSF", "mainfloorSF",
+                                               "nbrFullBaths", "parks.Buffer", 
+                                               "school_nn3", "playground_nn3", "lake_nn3", "trailhd_nn3", 
+                                               "popDensity", "pctBachelors"))
+
+
 boulder.test <-
   boulder.test %>%
-  mutate(price.Predict = predict(reg.training, boulder.test),
+  mutate(Regression = "Baseline Regression",
+         price.Predict = predict(reg.training, boulder.test),
          price.Error = price.Predict - price,
          price.AbsError = abs(price.Predict - price),
          price.APE = (abs(price.Predict - price)) / price.Predict)%>%
-  filter(price < 5000000)
+  #filter(price < 5000000)
 
 #MAE
 mean(boulder.test$price.AbsError, na.rm = T)
@@ -693,6 +710,42 @@ mean(boulder.test$price.AbsError, na.rm = T)
 #MAPE
 mean(boulder.test$price.APE, na.rm = T)
 
+#Table for MAE and MAPE
+st_drop_geometry(boulder.test) %>%
+  group_by(Regression) %>%
+    summarize(MAE = mean(price.AbsError, na.rm = T),
+              MAPE = mean(price.APE, na.rm = T)) %>%
+    kable() %>% kable_styling()
+
+#Predicted prices as a function of observed prices
+st_drop_geometry(boulder.test) %>%
+  ggplot(aes(price.Predict, price), na.rm=TRUE) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA342A") +
+     labs(title = "Predicted Prices as a function of Observed Prices",
+          x = "Predicted Price", y = "Observed Price",
+          caption="Figure XX") +
+     plotTheme()
+
+#map of predicted prices
+boulder.sf <-
+  boulder.sf %>%
+  mutate(Regression = "Baseline Regression",
+         price.Predict = predict(reg.training, boulder.sf))
+
+ggplot() +
+    geom_sf(data=tracts19, show.legend = NA, color='grey', lwd=0.1, alpha=.4)+
+    geom_sf(data=boulderCounty, show.legend = NA, fill = "transparent", lwd=0.8)+
+    geom_sf(data = boulder.sf, aes(color = q5(price.Predict)), 
+            show.legend = "point", size = 0.3)+
+    scale_color_brewer(type=seq, palette = "YlOrRd", labels=qBr(boulder.sf,"price.Predict"),
+                      name="Quintile\nBreaks")+
+    labs(title="Predicted Prices for All Homes",
+         subtitle="Boulder County, CO", 
+         caption="Figure XX") +
+    mapTheme()
+
+
+#Cross validation
 #Generalizability
 fitControl <- trainControl(method = "cv", number = 100)
 set.seed(825)
@@ -705,7 +758,118 @@ reg.cv <-
 reg.cv
 
 reg.cv$resample[1:5,]
+
+#Distribution of MAE
+ggplot(data=reg.cv$resample, aes(reg.training.cv$resample$MAE)) + 
+  geom_histogram(color="#08519c", fill="#08519c", alpha=0.8, bins=50) +
+  labs(title = "Distribution of Mean Absolute Error: Baseline Regression",
+       subtitle = "k-fold cross validation; k=100",
+       x = "Mean Absolute Error", y = "Count",
+       caption="Figure XX") +
+  plotTheme()
 ```
+
+#Moran's I
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
+moranTest <- moran.mc(boulder.test$price.Error, 
+                      spatialWeights.test, nsim = 999)
+
+#Observed and permuted Moran's I
+ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
+  geom_histogram(binwidth = 0.01) +
+  geom_vline(aes(xintercept = moranTest$statistic), colour = "#FA342A",size=1) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  labs(title="Observed and permuted Moran's I",
+       subtitle= "Observed Moran's I in orange",
+       x="Moran's I",
+       y="Count",
+       caption="Figure XX") +
+  plotTheme()
+  
+#Price as a function of 
+  st_drop_geometry(boulder.test) %>%
+  ggplot(aes(lagPriceError, price.Error), na.rm=TRUE) +
+     geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#08519c") +
+     labs(title = "Price Error as a function of the Spatial Lag of Price Errors",
+          caption="Figure XX",
+          x="Spatial Lag of Price Errors (Mean Error of 5 Nearest Neighbors)",
+          y="Price Error") +
+     plotTheme()
+
+```
+
+#Neighborhood
+```{r generalizability by neighborhood}
+
+reg.nhood <- lm(price ~ ., data = as.data.frame(boulder.training) %>% 
+                                  dplyr::select()
+
+
+stargazer(reg.training, type="html", star.cutoffs = c(0.05, 0.01, 0.001), 
+          median=TRUE, title="Table XX. Neighborhood Regression Results of Training Set", align=TRUE,
+          single.row=TRUE, digits=2, omit = c("))
+          
+summary(reg.nhood) %>% 
+  xtable() %>%
+  kable(align='c', caption="Variables in Training Set Neighborhood Regression", 
+        digits=2) %>%
+  kable_styling() %>%
+  scroll_box(width = "100%", height = "300px")          
+
+#baseline error vs neighborhood effects
+boulder.test.nhood <-
+  boulder.test %>%
+  mutate(Regression = "Neighborhood Effects",
+         price.Predict = predict(reg.nhood, boulder.test),
+         price.Error = price.Predict- price,
+         price.AbsError = abs(price.Predict- price),
+         price.APE = (abs(price.Predict- price)) / price)
+
+
+bothRegressions <- 
+  rbind(
+    dplyr::select(boulder.test, starts_with("price"), Regression, GEOID),
+    dplyr::select(boulder.test.nhood, starts_with("price"), Regression, GEOID)) 
+
+
+st_drop_geometry(bothRegressions) %>%
+  group_by(Regression, GEOID) %>%
+  summarize(mean.MAPE = mean(price.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(tracts19) %>%
+    st_sf() %>%
+    ggplot() + 
+      geom_sf(aes(fill = mean.MAPE)) +
+      geom_sf(data = bothRegressions, colour = "black", size = .5) +
+      facet_wrap(~Regression) +
+      scale_fill_gradient(low = palette5[1], high = palette5[5],
+                          name = "MAPE") +
+      labs(title = "Test Set MAPE by Neighborhood",
+           subtitle="Boulder County, CO", 
+           caption="Figure XX") +
+      mapTheme()          
+
+#MAPE as a function of price
+st_drop_geometry(bothRegressions) %>%
+  gather(Variable, Value, -Regression, -GEOID) %>%
+  filter(Variable == "price.APE" | Variable == "price") %>%
+  group_by(GEOID, Variable) %>%
+    summarize(meanValue = mean(Value, na.rm = T)) %>%
+    spread(Variable, meanValue) %>%
+    ggplot(aes(price.APE, price), na.rm=TRUE) +
+     geom_point(size = 2, color="#08519c") + 
+     #geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     labs(title = "Mean Absolute Percentage Error (MAPE) as a function of Price",
+          caption="Figure XX",
+          x="MAPE by Neighborhood",
+          y="Mean Price by Neighborhood") +
+     plotTheme()
+     
+     
+#Generalizability by Neighborhood
+
+```
+
 
 ## Mean absolute error MAE by Municipality
 
@@ -775,6 +939,8 @@ st_drop_geometry(bothRegressions) %>%
     spread(Variable, meanValue) %>%
     kable()
 ```
+
+
 
 ## Generalizability of the models in this project
 
