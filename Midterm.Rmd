@@ -867,7 +867,15 @@ st_drop_geometry(bothRegressions) %>%
      
      
 #Generalizability by Neighborhood
+tracts19 <- tracts19 %>% 
+         mutate (incomeContext = ifelse(Median_Income > 32322, "High Income", "Low Income")
 
+ ggplot() + geom_sf(data = na.omit(tracts19), aes(fill = incomeContext)) +
+    scale_fill_manual(values = c("#eff3ff", "#08519c"), name="Income Context") +
+    labs(title = "Income Context",
+         subtitle="Boulder County, CO", 
+         caption="Figure XX") +
+    mapTheme()
 ```
 
 
