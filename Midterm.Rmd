@@ -115,6 +115,7 @@ boulder.sf <- housingData %>%
          Construction = ConstCodeDscr,
          Internal = IntWallDscr)
 
+
 #State Plane Colorado - ESRI:102653
 #Colorado North - ESRI:102253
 #Colorado Central - ESRI:102254
@@ -128,7 +129,7 @@ Visualizing home prices spatially distributed across Boulder County.
 
 ggplot() +
   geom_sf(data = boulderCounty, fill = "grey90") +
-  geom_sf(data = muni, fill = NA) +
+  geom_sf(data = tracts19, fill = NA) +
   geom_sf(data = boulder.sf, aes(colour = q5(price)), 
           show.legend = "point", size = .5) +
   scale_color_manual(values = palette5,
@@ -154,9 +155,6 @@ Physical characteristics of the homes are important factors for predicting home 
 
 ## Gathering and Wrangling External Characteristics
 
-### OSM Data for Boulder County
-
-Open Street Map
 
 ```{r OSM, echo=FALSE}
 install.packages("osmdata")
@@ -183,13 +181,6 @@ marijuanaestablishments <-
    st_read("https://opendata.arcgis.com/datasets/425a0adb547a4faba4b741a4fe4373b1_0.geojson") %>%
   st_transform(st_crs('ESRI:102653'))
 
-#---- Parks ----
-
-parks <- 
-  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/County_Open_Space.geojson") %>%
-  filter(!is.na(PARK_GROUP)) %>%
-  st_transform('ESRI:102653')
-
 
 # ----- Schools + Universities----
 
@@ -204,6 +195,14 @@ university.sf <- st_geometry(uni$osm_points) %>%
   st_sf() %>%
   cbind(., uni$osm_points$osm_id) %>% 
   rename(NAME = uni.osm_points.osm_id)
+
+#---- Parks ----
+
+parks <- 
+  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Midterm/County_Open_Space.geojson") %>%
+  filter(!is.na(PARK_GROUP)) %>%
+  st_transform('ESRI:102653')
+
 
 
 # ----- Hospitals + Clinics ----
@@ -438,7 +437,7 @@ The Exploratory Analysis here helped us understand which variables (internal and
 
 #Internal Characteristics Correlation Plots
 st_drop_geometry(boulder.sf) %>% 
-  mutate(Age = 2015 - builtYear) %>%
+  mutate(Age = 2015 - YearBuilt) %>%
   dplyr::select(price, Size, Age, TotalBedrooms, TotalBathrooms, GarageSize) %>%
   filter(price <= 1000000, Age < 500) %>%
   gather(Variable, Value, -price) %>% 
@@ -480,7 +479,7 @@ As you can see on the bar plots, categorical variables influence price increase 
 #Price as function of distance to parks
 boulder.sf %>%
   st_drop_geometry() %>%
-  mutate(Age = 2015 - builtYear) %>%
+  mutate(Age = 2015 - YearBuilt) %>%
   dplyr::select(price, starts_with("parks_")) %>%
   filter(price <= 1000000) %>%
   gather(Variable, Value, -price) %>% 
@@ -494,10 +493,10 @@ boulder.sf %>%
 
 ```{r}
 
-#Correlation to other external characteristics
+#Price as a function external characteristics
 st_drop_geometry(boulder.sf) %>% 
-  mutate(Age = 2015 - builtYear) %>%
-  dplyr::select(price, Age, TotalPop, WhitePop, MedHHInc, medianage, trails_nn1, schools_nn1, restaurant_nn1, university_nn5, healthcare_nn1) %>%
+  mutate(Age = 2015 - YearBuilt) %>%
+  dplyr::select(price, Age, pctWhite, MedHHInc, medianage, parks_nn1, trails_nn1, schools_nn1, restaurant_nn1, university_nn1, healthcare_nn1) %>%
   filter(price <= 1000000, Age < 500) %>%
   gather(Variable, Value, -price) %>% 
   ggplot(aes(Value, price)) +
@@ -507,49 +506,39 @@ st_drop_geometry(boulder.sf) %>%
      plotTheme()
 
 ```
-Additional variables that we looked at are 
+### Correlation Matrix
 
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
+
+corrplot <- st_drop_geometry(boulder.sf) %>% 
+  select(price, Size, TotalBathrooms, TotalBedrooms, GarageSize, MedHHInc, pctWhite, medianage, parks_nn1, trails_nn1, schools_nn1, libraries_nn1, university_nn1, healthcare_nn1, restaurant_nn1, marijuanaestablishments_nn1, floodzones, sceniccorridor) %>% na.omit(na.action = "omit")
+
+ggcorrplot(
+  round(cor(corrplot), 1), 
+  p.mat = cor_pmat(corrplot),
+  show.diag = TRUE,
+  colors = c("#8d2323", "white", "#ddaa88"),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables")
+
+```
 
 ### Regressions for determining correlation strength 
 
-Statistical significance of size
-```{r}
-reg1 <- lm(price ~ Size, data = boulder.sf)
-
-#Table 1 Kable-Tidy
-reg1 %>%
-  tidy() %>%
-  mutate(p.value = scales::pvalue(p.value))%>%
-  kable(
-    caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
-    Boulder County", 
-    col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
-    digits = c(0, 2, 3, 2, 3),
-    align = c("l", "r", "r", "r", "r")
-  ) %>%
-  kable_styling()
-    
-summary(reg1)
-
-#Table 1 (Stargazer)
-stargazer(reg1, type = "html", 
-          dep.var.labels=c("Price total"),
-          covariate.labels=c("Size in sqm"))
-
-```
 The following two regressions test significance of multiple internal features and then several external features we engineered in the previous part of this exercise.
 
-```{r Internal Features Regression}
+```{r Model 1: Internal Features Only}
 head(boulder.sf)
 
-reg2 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
-                                 dplyr::select(price, Size, builtYear, 
+reg1 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
+                                 dplyr::select(price, Size, YearBuilt, 
                                                Construction, BuildingType, Internal, Quality,
                                                TotalBedrooms, TotalBathrooms
                                                ))
-summary(reg2)
+summary(reg1)
 
-reg2 %>%
+reg1 %>%
   tidy() %>%
   kable(
     caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
@@ -564,17 +553,17 @@ reg2 %>%
 ```
 
 
-```{r External Features Regression}
+```{r Model 2: Internal + Demographic Characteristics}
 
-reg3 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
-                                 dplyr::select(price, Size, builtYear, 
-                                               Construction, BuildingType, Quality,
-                                               TotalBedrooms, TotalBathrooms, MedHHInc, TotalPop,
-                                               WhitePop, medianage))
-summary(reg3)
+reg2 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
+                                 dplyr::select(price, Size, YearBuilt, 
+                                               Construction, BuildingType, Internal, Quality,
+                                               TotalBedrooms, TotalBathrooms, MedHHInc, pctWhite,
+                                               medianage))
+summary(reg2)
 
 
-reg3 %>%
+reg2 %>%
   tidy() %>%
   kable(
     caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
@@ -586,31 +575,24 @@ reg3 %>%
   kable_styling() %>%
   footnote(general = "Adjusted R-squared:  0.422")
 
-
-#Coefficients of all models
-plot_summs(reg1, reg3, reg2)
 ```
 
 The above model shows how including demographic features such as HH Income, Population, Age and Race add greater significance to the overall regression.
 
-```{r}
+```{r Model 3: Internal + Demographics + Amenities}
 
-reg4 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
-                                 dplyr::select(price, Size, builtYear, 
-                                               Construction, BuildingType, Quality,
-                                               TotalBedrooms, TotalBathrooms, MedHHInc, TotalPop,
-                                               WhitePop, medianage, parks_nn1, parks_nn3,
-                                               schools_nn1, schools_nn3, schools_nn5, 
-                                               university_nn1, libraries_nn1,
-                                               healthcare_nn3, trails_nn3,
-                                               restaurant_nn1,
+reg3 <- lm(price ~ ., data = st_drop_geometry(boulder.sf) %>% 
+                                 dplyr::select(price, Size, YearBuilt, 
+                                               Construction, BuildingType, Internal, Quality, 
+                                               TotalBedrooms, TotalBathrooms, MedHHInc,
+                                               pctWhite, medianage, parks_nn1,
+                                               schools_nn1, libraries_nn1, trails_nn1,
                                                marijuanaestablishments_nn1, 
-                                               marijuanaestablishments_nn2,
-                                               marijuanaestablishments_nn5, sceniccorridor))
+                                               floodzones, sceniccorridor))
 
-summary(reg4)
+summary(reg3)
 
-reg4 %>%
+reg3 %>%
   tidy() %>%
   kable(
     caption = "Coefficient-Level Estimates for a Model Fitted to Predict Home Prices in 
@@ -623,25 +605,9 @@ reg4 %>%
   footnote(general = "Adjusted R-squared:  0.4955")
 
 ```
-When adding many external features and amenities (ie, parks, schools, university and trails, etc), the adjusted r-squared value is telling us that 50% of the variables in this list could be statistically significant to price. 
 
-### Correlation Matrix
+When adding many external features and amenities (ie, parks, schools, libraries and trails, etc), the adjusted r-squared value is telling us that 50% of the variables in this list could be statistically significant to price. 
 
-```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
-
-corrplot <- st_drop_geometry(boulder.sf) %>% 
-  select(price, Size, TotalBathrooms, TotalBedrooms, GarageSize, MedHHInc, TotalPop, medianage, WhitePop, parks_nn1, trails_nn1, schools_nn1, libraries_nn1, university_nn1, healthcare_nn1, restaurant_nn1, marijuanaestablishments_nn1, sceniccorridor) %>% na.omit(na.action = "omit")
-
-ggcorrplot(
-  round(cor(corrplot), 1), 
-  p.mat = cor_pmat(corrplot),
-  show.diag = TRUE,
-  colors = c("#8d2323", "white", "#ddaa88"),
-  type="lower",
-  insig = "blank") +  
-    labs(title = "Correlation across numeric variables")
-
-```
 
 ## Training the Model for homeprice predictions
 
@@ -653,14 +619,20 @@ In this section and forward in the document, we use the featured engineered data
 bouldert.sf <- filter(boulder.sf, toPredict==0)
 
 inTrain <- createDataPartition(
-              y = paste(bouldert.sf$Size, bouldert.sf$builtYear, bouldert.sf$TotalBedrooms), 
+              y = paste(bouldert.sf$Size, bouldert.sf$YearBuilt, bouldert.sf$TotalBedrooms), 
               p = .75, list = FALSE)
 
 boulder.training <- bouldert.sf[inTrain,] 
 boulder.test <- bouldert.sf[-inTrain,]  
 
 reg.training <- lm(price ~ ., data = st_drop_geometry(boulder.training) %>% 
-                                    dplyr::select(price, Size, builtYear, TotalBedrooms,                                                   TotalBathrooms, university_nn1, parks_nn1,parks_nn2))
+                                    dplyr::select(price, Size, YearBuilt, 
+                                               Construction, BuildingType, Internal, Quality, 
+                                               TotalBedrooms, TotalBathrooms, MedHHInc,
+                                               pctWhite, medianage, parks_nn1,
+                                               schools_nn1, libraries_nn1, trails_nn1,
+                                               marijuanaestablishments_nn1, 
+                                               floodzones, sceniccorridor))
 
 boulder.test <-
   boulder.test %>%
@@ -687,7 +659,13 @@ set.seed(825)
 
 reg.cv <- 
   train(price ~ ., data = st_drop_geometry(bouldert.sf) %>% 
-                                dplyr::select(price, Size, builtYear, TotalBedrooms,                                                  TotalBathrooms, university_nn1, parks_nn1,                                                      parks_nn2), 
+                                dplyr::select(price, Size, YearBuilt, 
+                                               Construction, BuildingType, Internal, Quality, 
+                                               TotalBedrooms, TotalBathrooms, MedHHInc,
+                                               pctWhite, medianage, parks_nn1,
+                                               schools_nn1, libraries_nn1, trails_nn1,
+                                               marijuanaestablishments_nn1, 
+                                               floodzones, sceniccorridor), 
      method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
@@ -868,6 +846,21 @@ st_drop_geometry(bothRegressions) %>%
       mapTheme()
 
 
+st_join(bothRegressions, tracts19) %>%
+  st_drop_geometry() %>%
+  group_by(Regression) %>%
+  summarize(mean.MAPE = mean(price.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(tracts19) %>%
+  st_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = mean.MAPE)) +
+  geom_sf(data = bothRegressions, colour = "black", size = .5) +
+  scale_fill_gradient(low = palette5[1], high = palette5[5],
+                      name = "MAPE", limits = c(0,1)) +
+  labs(title = "Mean test set MAPE by neighborhood") +
+  mapTheme()
+
 #----MAPE as a function of price----
 st_drop_geometry(bothRegressions) %>%
   gather(Variable, Value, -Regression, -GEOID) %>%
@@ -888,7 +881,9 @@ st_drop_geometry(bothRegressions) %>%
 
 
 ```{r}
-     
+
+    
+ 
 #Generalizability by Neighborhood
 tracts19 <- tracts19 %>% 
          mutate (incomeContext = ifelse(MedHHInc > 32322, "High Income", "Low Income"))
