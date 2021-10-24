@@ -310,7 +310,6 @@ boulder.sf <-
       university_nn5 = nn_function(st_c(boulder.sf), st_c(university.sf), 5)) 
 
 # Parks
-
 parks.sf <- st_centroid(parks)
 
 boulder.sf <-
@@ -342,8 +341,6 @@ boulder.sf <-
       restaurant_nn4 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 4), 
       restaurant_nn5 = nn_function(st_c(boulder.sf), st_c(restaurant.sf), 5)) 
 
-#Disaster risks
-
 #floodzones
 floodzones <-
   floodzones %>%
@@ -366,22 +363,6 @@ boulder.sf <-
 boulder.sf$sceniccorridor =
   ifelse(is.na(boulder.sf$sceniccorridor),0, 1)
 
-#wildfire
-#boulder.sf <- boulder.sf[-c(84:124)]
-
-wildfires <-
- wildfires %>%
- mutate(wildfire = 1)
-
-boulder.sf <-
-  st_join(boulder.sf, wildfires, join = st_within)
-
-boulder.sf$wildfires =
-  ifelse(is.na(boulder.sf$wildfires),0, 1)
-
-#Geohazards
-boulder.sf <-
-  st_join(boulder.sf, geohazards)
 
 ```
 ```{r}
