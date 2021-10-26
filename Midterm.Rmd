@@ -59,6 +59,8 @@ source("https://raw.githubusercontent.com/veronicaUPenn22/Public-Policy-Analytic
 # Color palette
 palette5 <- c("#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
 
+palette6 <- c("#16537e","#114163","#12234d","#20124d","#351c75")
+
 ```
 
 
@@ -133,13 +135,13 @@ Homes' internal characteristics:
 Physical characteristics of the homes are important factors for predicting home values. As in appraisals, the quality, age, size, number of bedrooms and bathrooms all influence it valuation. Functioning characteristics such as AC/Heating and plumbing systems also influence price.
 
 
-## Gathering and Wrangling External Characteristics
+## Gathering External Characteristics
 
 ### Census Data
 
 Retrieved from US Census Bureau. ACS 2019 5 year
 
-```{r message=FALSE, warning=FALSE}
+```{r Census Data, echo=TRUE, message=FALSE, warning=FALSE}
 # Load census API key
 census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
 
@@ -173,9 +175,29 @@ boulder.sf <-
     mutate(
       st_join(boulder.sf, tracts19, join = st_within))
 
+table(boulder.sf$Internal)
+
 ```
 
 ### Amenities + Public Services + Hazards
+
+
+#### Feature Engineering 
+
+Given that some of the variables contain a great amount of outliers we recategorized some of them. This is meant to potentially improve our model's generalizability and prediction power. Less than 40 homes had from 7 to 24 bedrooms, while over 4k houses had 3, we summarized all houses of 7 to 24 bedrooms into one single category (7+). For bathrooms, a similar categorization had to be done, any house with 7 to 12 bathrooms became a single category. 
+
+Na      Brick Concrete    Frame  Masonry  Precast   Veneer     Wood 
+75      125        6     9625     1526        2        1        4 
+
+In terms of categorical variables, we recategorized both construction materials and the interiority types into more general categories. Anything classified as masonry, precast, brick and concrete are became "stone based", while veneer, wood, frame, and the unidentified would become "No stone based".
+
+Na        Drywall   Hardwood Panel      Plaster   Plywood     Unfinished    Wall Board 
+79        10411     185                 482       32          40            135
+
+In the interiority, we decided to keep drywall, wall board and plaster as separate categoriws, then turn anything wood related into one, and finally putting unfinished and unidentified observations in 5th category.
+
+While these changes may not have made our model stronger, it certainly improved the predictions significantly, originally we only 208 observations in our test data, then we got _____. 
+
 
 ```{r Amenities + Public Services + Hazards, echo=FALSE, message=FALSE, warning=FALSE}
 install.packages("osmdata")
@@ -358,10 +380,10 @@ floodzones <-
   select(OBJECTID, StreamName, geometry, floodzone)
 
 boulder.sf <-
-  st_join(boulder.sf, floodzones, join = st_within)
+  st_join(boulder.sf, floodzones, join = st_contains)
 
-boulder.sf$floodzones =
-  ifelse(is.na(boulder.sf$floodzone),0, 1)
+boulder.sf$floodzones_1 =
+  ifelse(is.na(boulder.sf$floodzone_1),0, 1)
 
 
 #scenic corridor
@@ -421,16 +443,21 @@ Libraries, Trails, Marijuana Establishments, Schools, Universities, Parks...
 
 ```{r Libraries, echo=TRUE, message=FALSE, warning=FALSE}
 
+LibBuffers <- 
+  st_union(st_buffer(libraries, 5280)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer")
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
   geom_sf(data = boulder.sf, aes(colour = q5(price)), show.legend = "point", size = .5) +
+  geom_sf(data = LibBuffers, color = "darkred", fill = "transparent") +
   geom_sf(data = libraries, color = "darkred", alpha = .5, size = 3) +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "price"),
                    name = "Quintile\nBreaks") +
-  labs(title="Libraries and Sale Price in Boulder County",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+  labs(title="Distance to Libraries in Boulder County",
+       subtitle="0.25mi buffer of distance from amenities"
        ) +
   mapTheme()
 
@@ -438,16 +465,21 @@ ggplot() +
 
 ```{r Trails Distance, echo=FALSE, message=FALSE, warning=FALSE}
 
+TrailsBuffers <- 
+  st_union(st_buffer(trails, 5280)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer")
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
   geom_sf(data = boulder.sf, aes(colour = q5(trails_nn1)), show.legend = "point", size = .5) +
-  #geom_sf(data = trails, color = "darkred", alpha = .2, size = 3) +
+  geom_sf(data = TrailsBuffers,color = "darkred", fill = "transparent", size = 0.2) +
+  geom_sf(data = trails, color = "darkred", size = 0.5) +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "trails_nn1"),
                    name = "Quintile\nBreaks") +
-  labs(title="Distance to in Boulder County (ft)",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+  labs(title="Distance to trails in Boulder County (ft)",
+       subtitle="0.25mi buffer of distance from a trail"
        ) +
   mapTheme()
 
@@ -455,16 +487,24 @@ ggplot() +
 
 ```{r Marijuana Establishments, echo=FALSE, message=FALSE, warning=FALSE}
 
+
+MariBuffers <- 
+  st_union(st_buffer(marijuanaestablishments, 5280)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer")
+
+MariBuffers <- filter(MariBuffers, Legend=="Unioned Buffer")
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
   geom_sf(data = boulder.sf, aes(colour = q5(marijuanaestablishments_nn1)), show.legend = "point", size = .5) +
-  geom_sf(data = marijuanaestablishments, color = "darkred", alpha = .2, size = 3) +
+  geom_sf(data = MariBuffers, color = "darkred", fill = "transparent") +
+  geom_sf(data = marijuanaestablishments, color = "darkred", alpha = .3, size = 3) +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "marijuanaestablishments_nn1"),
                    name = "Quintile\nBreaks") +
   labs(title="Distance to Marijuana Establishments (ft)",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+       subtitle="0.25mi buffer of distance from amenities"
        ) +
   mapTheme()
 
@@ -472,16 +512,21 @@ ggplot() +
 
 ```{r Schools, echo=FALSE, message=FALSE, warning=FALSE}
 
+SchoolsBuffers <- 
+  st_union(st_buffer(schools, 5280)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer")
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
+  geom_sf(data = SchoolsBuffers, color = "darkred", fill = "transparent") +
   geom_sf(data = boulder.sf, aes(colour = q5(schools_nn1)), show.legend = "point", size = .5) +
-  geom_sf(data = schools, color = "darkred", alpha = .2, size = 3) +
+  geom_sf(data = schools, color = "darkred", alpha = .3, size = 2) +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "schools_nn1"),
                    name = "Quintile\nBreaks") +
   labs(title="Distance to Schools (ft)",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+       subtitle="0.25mi buffer of distance from amenities"
        ) +
   mapTheme()
 
@@ -489,16 +534,21 @@ ggplot() +
 
 ```{r Universities, echo=FALSE, message=FALSE, warning=FALSE}
 
+UniBuffers <- 
+  st_union(st_buffer(university.sf, 1320)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer")
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
   geom_sf(data = boulder.sf, aes(colour = q5(university_nn1)), show.legend = "point", size = .5) +
+  geom_sf(data = UniBuffers, color = "darkred", fill = "transparent") +
   geom_sf(data = university.sf, color = "darkred", alpha = .2, size = 3) +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "university_nn1"),
                    name = "Quintile\nBreaks") +
   labs(title="Distance to University (ft)",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+       subtitle="0.5mi buffer of distance from amenities"
        ) +
   mapTheme()
 ```
@@ -507,46 +557,71 @@ ggplot() +
 
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
-  geom_sf(data = parks, color = NA, fill = "darkgreen", alpha = .2) +
+  geom_sf(data = parks, color = NA, fill = "#114163", alpha = .6) +
   geom_sf(data = boulder.sf, aes(colour = q5(parks_nn1)), show.legend = "point", size = .5) +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "parks_nn1"),
                    name = "Quintile\nBreaks") +
   labs(title="Distance to Parks (ft)",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+       subtitle="0.25mi buffer of distance from amenities"
        ) +
   mapTheme()
 
 ```
 
 ```{r Healthcare Facilities, echo=FALSE, message=FALSE, warning=FALSE}
+
+HealthBuffers <- 
+  rbind(
+    st_buffer(healthcare, 1320) %>%
+      mutate(Legend = "5mi Buffer") %>%
+      dplyr::select(Legend),
+  st_union(st_buffer(healthcare, 1320)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+HealthBuffers <- filter(HealthBuffers, Legend=="Unioned Buffer")
+
+
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  #geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
   geom_sf(data = boulder.sf, aes(colour = q5(healthcare_nn1)), show.legend = "point", size = .5) +
   geom_sf(data = healthcare, color = "darkred", alpha = .2, size = 3) +
+  geom_sf(data = HealthBuffers,color = "darkred", fill = "transparent") +
   scale_color_manual(values = palette5,
                    labels = qBr(boulder.sf, "healthcare_nn1"),
                    name = "Quintile\nBreaks") +
   labs(title="Distance to Healthcare Facilities (ft)",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+       subtitle="0.25mi buffer of distance from amenities"
        ) +
   mapTheme()
 
 ```
 
 ```{r Restaurants, echo=FALSE, message=FALSE, warning=FALSE}
+
+RestBuffers <- 
+  rbind(
+    st_buffer(restaurant.sf, 1320) %>%
+      mutate(Legend = "5mi Buffer") %>%
+      dplyr::select(Legend),
+  st_union(st_buffer(restaurant.sf, 1320)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+RestBuffers <- filter(RestBuffers, Legend=="Unioned Buffer")
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  #geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
-  geom_sf(data = boulder.sf, aes(colour = q5(restaurant_nn1)), show.legend = "point", size = .5) +
-  geom_sf(data = healthcare, color = "darkred", alpha = .2, size = 3) +
+  geom_sf(data = RestBuffers, color = "darkred", fill = "transparent") +
+  geom_sf(data = boulder.sf, aes(colour = q5(restaurant_nn3)), show.legend = "point", size = .5) +
+  geom_sf(data = restaurant.sf, color = "darkred", alpha = .2, size = 2) +
   scale_color_manual(values = palette5,
-                   labels = qBr(boulder.sf, "restaurant_nn1"),
+                   labels = qBr(boulder.sf, "restaurant_nn3"),
                    name = "Quintile\nBreaks") +
   labs(title="Distance to Restaurants (ft)",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+       subtitle="0.25mi buffer of distance from amenities"
        ) +
   mapTheme()
 
@@ -554,12 +629,17 @@ ggplot() +
 
 ```{r Floodzones, echo=FALSE, message=FALSE, warning=FALSE}
 
+FloodBuffers <- 
+  st_union(st_buffer(floodzones, 1320)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer")
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
-  geom_sf(data = floodzones, color = "skyblue", fill = "skyblue", alpha = .5) +
-  geom_sf(data = boulder.sf, aes(colour = factor(floodzones)), show.legend = "point", size = .75) +
-  scale_color_manual(values = c("#e5989b","#6d6875")) +
+  geom_sf(data = floodzones, color = NA, fill = "#114163", alpha = .6) +
+  #geom_sf(data = FloodBuffers, color = "#16537e", fill = "transparent") +
+  geom_sf(data = boulder.sf, aes(colour = factor(floodzones_1)), show.legend = "point", size = .8) +
+  scale_color_manual(values = c("#e5989b","#351c75")) +
   labs(title="Flood Impacted Homes in Boulder County",
        subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities",
        color = "0 is Not affected") +
@@ -569,14 +649,15 @@ ggplot() +
 
 ```{r Scenic Corridor, echo=FALSE, message=FALSE, warning=FALSE}
 
+
 ggplot() +
   geom_sf(data = tracts19, fill = "grey90") +
-  geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
-  geom_sf(data = sceniccorridor, color = NA, fill = "darkgreen", alpha = .2) +
+  #geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
+  geom_sf(data = sceniccorridor, color = NA, fill = "#114163", alpha = .6) +
   geom_sf(data = boulder.sf, aes(colour = factor(sceniccorridor)), show.legend = "point", size = .5) +
-  scale_color_manual(values = c("#e5989b","#6d6875")) +
+  scale_color_manual(values = c("#e5989b","#351c75")) +
   labs(title="Homes vs Scenic Corridor",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities",
+       subtitle="Houses within the scenic corridor",
        color = "0 is Far") +
   mapTheme()
 
@@ -584,15 +665,19 @@ ggplot() +
 
 ```{r Med HH Income, echo=FALSE, message=FALSE, warning=FALSE}
 
-ggplot() +
-  geom_sf(data = tracts19, fill = "grey90") +
+
+ggplot(tracts19) +
+  geom_sf(colour= NA, aes(fill = q5(MedHHInc)), showlegend = TRUE, size = 0.5) +
   #geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
-  geom_sf(data = boulder.sf, aes(colour = q5(MedHHInc)), show.legend = "point", size = .5) +
+  scale_fill_manual(values = palette6,
+                   labels = qBr(tracts19, "MedHHInc"),
+                   name = "MedHHIncome") +
+  geom_sf(data = boulder.sf, aes(colour = q5(price)), showlegend = "point", size = 0.5) +
   scale_color_manual(values = palette5,
-                   labels = qBr(boulder.sf, "MedHHInc"),
-                   name = "Quintile\nBreaks") +
-  labs(title="Med HH Income and Homes",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+                   labels = qBr(boulder.sf, "price"),
+                   name = "Price\nQuintile Breaks")
+  labs(title="Med HH Income and Home Prices",
+       #subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
        ) +
   mapTheme()
 
@@ -600,31 +685,36 @@ ggplot() +
 
 ```{r Percent White, echo=FALSE, message=FALSE, warning=FALSE}
 
+
 ggplot() +
-  geom_sf(data = tracts19, fill = "grey90") +
-  #geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
-  geom_sf(data = boulder.sf, aes(colour = q5(pctWhite)), show.legend = "point", size = .5) +
+  geom_sf(data = tracts19, colour= NA, aes(fill = q5(pctWhite)), showlegend = TRUE) +
+  scale_fill_manual(values = palette6,
+                   labels = as.integer(tracts19$pctWhite*100),
+                   name = "Percent White") +
+  geom_sf(data = boulder.sf, aes(colour = q5(price)), show.legend = "point", size = .5) +
   scale_color_manual(values = palette5,
-                   labels = boulder.sf, "pctWhite",
-                   name = "Quintile\nBreaks") +
-  labs(title="Pct White accross Boulder County Homes",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+                   labels = qBr(boulder.sf, "price"),
+                   name = "Price\nQuintile Breaks") +
+  labs(title="Pct White and Home Prices",
+       #subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
        ) +
   mapTheme()
 
 ```
 
-```{r Percent White, echo=FALSE, message=FALSE, warning=FALSE}
+```{r Median Age, echo=FALSE, message=FALSE, warning=FALSE}
 
 ggplot() +
-  geom_sf(data = tracts19, fill = "grey90") +
-  #geom_sf(data = Unioned_buffer, color = "grey", fill = "transparent") +
-  geom_sf(data = boulder.sf, aes(colour = q5(medianage)), show.legend = "point", size = .5) +
+  geom_sf(data = tracts19, colour= NA, aes(fill = q5(medianage)), showlegend = TRUE) +
+  scale_fill_manual(values = palette6,
+                   labels = qBr(tracts19, "medianage"),
+                   name = "Median Age") +
+  geom_sf(data = boulder.sf, aes(colour = q5(price)), show.legend = "point", size = .5) +
   scale_color_manual(values = palette5,
-                   labels = qBr(boulder.sf, "medianage"),
+                   labels = qBr(boulder.sf, "price"),
                    name = "Median Age\n(Quintile Breaks)") +
-  labs(title="Pct White accross Boulder County Homes",
-       subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
+  labs(title="Median Age per Neighborhood (Tract) and Home Prices",
+       #subtitle="Light grey line is a 0.5mi buffer to have sense of scale of distance from amenities"
        ) +
   mapTheme()
 
@@ -633,6 +723,38 @@ ggplot() +
 ## Exploratory Analysis: Correlation Plots
 
 The Exploratory Analysis here helped us understand which variables (internal and external; numeric or categorical) are positively correlated to price change. 
+
+### Correlation Matrix
+
+```{r Corr Matrix, message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
+
+corrplot <- st_drop_geometry(boulder.sf) %>% 
+  select(price, Size, TotalBathrooms, TotalBedrooms, GarageSize, MedHHInc, pctWhite, medianage, parks_nn1, trails_nn1, schools_nn1, libraries_nn1, university_nn1, healthcare_nn1, restaurant_nn1, marijuanaestablishments_nn1, floodzones, sceniccorridor) %>% na.omit(na.action = "omit")
+
+ggcorrplot(
+  round(cor(corrplot), 1), 
+  p.mat = cor_pmat(corrplot),
+  show.diag = TRUE,
+  colors = c("#8d2323", "white", "#ddaa88"),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables")
+
+corrplot2 <- st_drop_geometry(boulder.sf) %>% 
+  select(price, Size, TotalBathrooms, TotalBedrooms, GarageSize, MedHHInc, pctWhite, medianage, parks_nn1, trails_nn1, schools_nn1, libraries_nn1, marijuanaestablishments_nn1, floodzones, sceniccorridor) %>% na.omit(na.action = "omit")
+
+ggcorrplot(
+  round(cor(corrplot2), 1), 
+  p.mat = cor_pmat(corrplot2),
+  show.diag = TRUE,
+  colors = c("#8d2323", "white", "#ddaa88"),
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables, dropping colinearity")
+
+```
+
+### Correlation to Internal Characteristics
 
 ```{r Internal Numeric, message=FALSE, warning=FALSE}
 
@@ -672,7 +794,7 @@ st_drop_geometry(boulder.sf) %>%
 
 As you can see on the bar plots, categorical variables influence price increase significantly. Building typology, construction, interiority finishes and the quality rate from appraisals determine price strongly. While building type and material might be good features to use in a prediction model, quality should be used cautiously, as there is a level of bias in appraisals that the data may not reflect.
 
-### Correlation to external features
+### Correlation to External Features
 
 ```{r External Features, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -689,39 +811,11 @@ st_drop_geometry(boulder.sf) %>%
      plotTheme()
 
 ```
-### Correlation Matrix
-
-```{r Corr Matrix, message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
-
-corrplot <- st_drop_geometry(boulder.sf) %>% 
-  select(price, Size, TotalBathrooms, TotalBedrooms, GarageSize, MedHHInc, pctWhite, medianage, parks_nn1, trails_nn1, schools_nn1, libraries_nn1, university_nn1, healthcare_nn1, restaurant_nn1, marijuanaestablishments_nn1, floodzones, sceniccorridor) %>% na.omit(na.action = "omit")
-
-ggcorrplot(
-  round(cor(corrplot), 1), 
-  p.mat = cor_pmat(corrplot),
-  show.diag = TRUE,
-  colors = c("#8d2323", "white", "#ddaa88"),
-  type="lower",
-  insig = "blank") +  
-    labs(title = "Correlation across numeric variables")
-
-corrplot2 <- st_drop_geometry(boulder.sf) %>% 
-  select(price, Size, TotalBathrooms, TotalBedrooms, GarageSize, MedHHInc, pctWhite, medianage, parks_nn1, trails_nn1, schools_nn1, libraries_nn1, marijuanaestablishments_nn1, floodzones, sceniccorridor) %>% na.omit(na.action = "omit")
-
-ggcorrplot(
-  round(cor(corrplot2), 1), 
-  p.mat = cor_pmat(corrplot2),
-  show.diag = TRUE,
-  colors = c("#8d2323", "white", "#ddaa88"),
-  type="lower",
-  insig = "blank") +  
-    labs(title = "Correlation across numeric variables, dropping colinearity")
-
-```
 
 ### Regressions for determining correlation strength 
 
 The following two regressions test significance of multiple internal features and then several external features we engineered in the previous part of this exercise.
+
 
 ```{r Model 1: Internal Features Only, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -885,7 +979,7 @@ st_drop_geometry(boulder.test) %>%
 
 
 ```{r}
-#Map of predicted prices w/ Entire Dataset
+#-----Map of predicted prices w/ Entire Dataset----
 boulder.sf <-
   boulder.sf %>%
   mutate(Regression = "Baseline Regression",
@@ -964,7 +1058,7 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 
 ## Map of Predicted Prices: Entire Dataset
 
-```{r}
+```{r Map Price Predict}
 
 boulder.test$price.Predict<- predict(boulder.training, newdata = boulder.test)
 
@@ -997,7 +1091,7 @@ The tracts effects accounts for the mean of prices if the values from price to p
 
 Summary of reg.tracts will indicate if census tracts is highly significant here. 
 
-```{r}
+```{r Model Tracts}
 reg.tracts <- lm(price ~ ., data = as.data.frame(boulder.training) %>% 
                                   dplyr::select(price, Size, YearBuilt, 
                                                Construction, BuildingType, Internal, Quality, 
@@ -1018,6 +1112,7 @@ summary(reg.tracts) %>%
   kable_styling() %>%
   scroll_box(width = "100%", height = "300px")          
 
+
 #----baseline error vs neighborhood effects----
 boulder.test.tracts <-
   boulder.test %>%
@@ -1033,8 +1128,20 @@ bothRegressions <-
     dplyr::select(boulder.test, starts_with("price"), Regression, GEOID),
     dplyr::select(boulder.test.tracts, starts_with("price"), Regression, GEOID)) 
 
-#----MAP of mean MAPE by tracts for bothRegressions----
+st_drop_geometry(bothRegressions) %>%
+  group_by(Regression) %>%
+  summarize(MAE = mean(price.AbsError, na.rm = T),
+            MAPE = mean(price.APE, na.rm = T),
+            Error = mean(price.Error, na.rm = T)) %>%
+  kable() %>% kable_styling()
 
+```
+
+
+
+```{r Model Tracts Both Regressions}
+
+#----MAP of mean MAPE by tracts for bothRegressions----
 st_drop_geometry(bothRegressions) %>%
   group_by(Regression, GEOID) %>%
   summarize(mean.MAPE = mean(price.APE, na.rm = T)) %>%
@@ -1051,21 +1158,6 @@ st_drop_geometry(bothRegressions) %>%
       labs(title = "Mean test set MAPE by neighborhood") +
       mapTheme()
 
-
-st_join(bothRegressions, tracts19) %>%
-  st_drop_geometry() %>%
-  group_by(Regression) %>%
-  summarize(mean.MAPE = mean(price.APE, na.rm = T)) %>%
-  ungroup() %>% 
-  #left_join(tracts19) %>%
-  st_sf() %>%
-  ggplot() + 
-  geom_sf(aes(fill = mean.MAPE)) +
-  geom_sf(data = bothRegressions, colour = "black", size = .5) +
-  scale_fill_gradient(low = palette5[1], high = palette5[5],
-                      name = "MAPE", limits = c(0,1)) +
-  labs(title = "Mean test set MAPE by neighborhood") +
-  mapTheme()
 
 #----MAPE as a function of price----
 st_drop_geometry(bothRegressions) %>%
@@ -1086,7 +1178,7 @@ st_drop_geometry(bothRegressions) %>%
 
 ### Generalizability by Neighborhood
 
-```{r}
+```{r Generalizability Tracts}
 
 summary(tracts19$MedHHInc)
 
