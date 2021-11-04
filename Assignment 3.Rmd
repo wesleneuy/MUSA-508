@@ -194,7 +194,7 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval)
 }
 
 # Cross-validate function from chapter 5 (left in chapter)
-crossValidate <- function(dataset, id, dependentVariable, indVariables) {
+crossValidate.1 <- function(dataset, id, dependentVariable, indVariables) {
   
   allPredictions <- data.frame()
   cvID_list <- unique(dataset[[id]])
@@ -210,7 +210,7 @@ crossValidate <- function(dataset, id, dependentVariable, indVariables) {
       dplyr::select(id, geometry, indVariables, dependentVariable)
     
     regression <-
-      glm(dependentVariable ~ ., family = "poisson", 
+      glm(traffic_crash_count ~ ., family = "poisson", 
           data = fold.train %>% 
             dplyr::select(-geometry, -id))
     
@@ -485,7 +485,7 @@ speedcamera <-
 
 #bus stops
 busstops <- 
-  st_read("~/GitHub/MUSA-508/CTA_BusStops/CTA_BusStops.shp") %>% 
+  st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/CTA_BusStops/CTA_BusStops.shp") %>% 
   st_transform('ESRI:102271')
 
 neighborhoods <- 
@@ -641,7 +641,7 @@ ggplot(correlation.long, aes(Value, traffic_crash_count)) +
 ```
 
 #Cross Validation
-```{r S, echo=FALSE}
+```{r S, echo=FALSE, message=FALSE, warning=FALSE}
 
 #Histogram of Dependent Variable
 ggplot(final_net, aes(traffic_crash_count)) + 
@@ -651,9 +651,9 @@ ggplot(final_net, aes(traffic_crash_count)) +
 
 ## define the variables we want
 reg.ss.vars <- c("potholes.nn", "redlight.nn", "speedcamera.nn","streetLightsOut.nn")
-
+  
 ## RUN REGRESSIONS
-reg.ss.spatialCV <- crossValidate(
+reg.ss.spatialCV <- crossValidate.1(
   dataset = final_net,
   id = "name",                           
   dependentVariable = "traffic_crash_count",
