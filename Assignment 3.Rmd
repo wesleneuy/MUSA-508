@@ -1,0 +1,800 @@
+---
+title: "Assignment 3 Copy"
+author: "Veronica Rosado"
+date: "11/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+```
+
+```{r functions, include=FALSE}
+#plotTheme FOR CHAPTER 1, 6, 7 = title_size = 16
+#plotTheme FOR CHAPTER 2       = title_size = 24
+#plotTheme FOR CHAPTER 3,4,5,8 = title_size = 14
+plotTheme <- function(base_size = 12, title_size = 16) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = title_size, colour = "black"), 
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 14)
+  )
+}
+
+#mapTheme FOR CHAPTER 1       = title_size = 16
+#mapTheme FOR CHAPTER 2       = title_size = 24
+#mapTheme FOR CHAPTER 3,4,5,8 = title_size = 14
+mapTheme <- function(base_size = 12, title_size = 16) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = title_size,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.text.x = element_text(size = 14))
+}
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+
+#this function converts a raster to a data frame that can be plotted
+rast <- function(inRaster) {
+  data.frame(
+    xyFromCell(inRaster, 1:ncell(inRaster)), 
+    value = getValues(inRaster)) }
+
+##this is the nearest neighbor function
+nn_function <- function(measureFrom,measureTo,k) {
+  measureFrom_Matrix <-
+    as.matrix(measureFrom)
+  measureTo_Matrix <-
+    as.matrix(measureTo)
+  nn <-   
+    get.knnx(measureTo, measureFrom, k)$nn.dist
+  output <-
+    as.data.frame(nn) %>%
+    rownames_to_column(var = "thisPoint") %>%
+    gather(points, point_distance, V1:ncol(.)) %>%
+    arrange(as.numeric(thisPoint)) %>%
+    group_by(thisPoint) %>%
+    summarize(pointDistance = mean(point_distance)) %>%
+    arrange(as.numeric(thisPoint)) %>% 
+    dplyr::select(-thisPoint) %>%
+    pull()
+  
+  return(output)  
+}
+
+# Multi-ring Buffer
+multipleRingBuffer <- function(inputPolygon, maxDistance, interval) 
+{
+  #create a list of distances that we'll iterate through to create each ring
+  distances <- seq(0, maxDistance, interval)
+  #we'll start with the second value in that list - the first is '0'
+  distancesCounter <- 2
+  #total number of rings we're going to create
+  numberOfRings <- floor(maxDistance / interval)
+  #a counter of number of rings
+  numberOfRingsCounter <- 1
+  #initialize an otuput data frame (that is not an sf)
+  allRings <- data.frame()
+  
+  #while number of rings  counteris less than the specified nubmer of rings
+  while (numberOfRingsCounter <= numberOfRings) 
+  {
+    #if we're interested in a negative buffer and this is the first buffer
+    #(ie. not distance = '0' in the distances list)
+    if(distances[distancesCounter] < 0 & distancesCounter == 2)
+    {
+      #buffer the input by the first distance
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      #different that buffer from the input polygon to get the first ring
+      buffer1_ <- st_difference(inputPolygon, buffer1)
+      #cast this sf as a polygon geometry type
+      thisRing <- st_cast(buffer1_, "POLYGON")
+      #take the last column which is 'geometry'
+      thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      #add a new field, 'distance' so we know how far the distance is for a give ring
+      thisRing$distance <- distances[distancesCounter]
+    }
+    
+    
+    #otherwise, if this is the second or more ring (and a negative buffer)
+    else if(distances[distancesCounter] < 0 & distancesCounter > 2) 
+    {
+      #buffer by a specific distance
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      #create the next smallest buffer
+      buffer2 <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      #This can then be used to difference out a buffer running from 660 to 1320
+      #This works because differencing 1320ft by 660ft = a buffer between 660 & 1320.
+      #bc the area after 660ft in buffer2 = NA.
+      thisRing <- st_difference(buffer2,buffer1)
+      #cast as apolygon
+      thisRing <- st_cast(thisRing, "POLYGON")
+      #get the last field
+      thisRing <- as.data.frame(thisRing$geometry)
+      #create the distance field
+      thisRing$distance <- distances[distancesCounter]
+    }
+    
+    #Otherwise, if its a positive buffer
+    else 
+    {
+      #Create a positive buffer
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      #create a positive buffer that is one distance smaller. So if its the first buffer
+      #distance, buffer1_ will = 0. 
+      buffer1_ <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      #difference the two buffers
+      thisRing <- st_difference(buffer1,buffer1_)
+      #cast as a polygon
+      thisRing <- st_cast(thisRing, "POLYGON")
+      #geometry column as a data frame
+      thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      #add teh distance
+      thisRing$distance <- distances[distancesCounter]
+    }  
+    
+    #rbind this ring to the rest of the rings
+    allRings <- rbind(allRings, thisRing)
+    #iterate the distance counter
+    distancesCounter <- distancesCounter + 1
+    #iterate the number of rings counter
+    numberOfRingsCounter <- numberOfRingsCounter + 1
+  }
+  
+  #convert the allRings data frame to an sf data frame
+  allRings <- st_as_sf(allRings)
+}
+
+# Cross-validate function from chapter 5 (left in chapter)
+crossValidate <- function(dataset, id, dependentVariable, indVariables) {
+  
+  allPredictions <- data.frame()
+  cvID_list <- unique(dataset[[id]])
+  
+  for (i in cvID_list) {
+    
+    thisFold <- i
+    cat("This hold out fold is", thisFold, "\n")
+    
+    fold.train <- filter(dataset, dataset[[id]] != thisFold) %>% as.data.frame() %>% 
+      dplyr::select(id, geometry, indVariables, dependentVariable)
+    fold.test  <- filter(dataset, dataset[[id]] == thisFold) %>% as.data.frame() %>% 
+      dplyr::select(id, geometry, indVariables, dependentVariable)
+    
+    regression <-
+      glm(dependentVariable ~ ., family = "poisson", 
+          data = fold.train %>% 
+            dplyr::select(-geometry, -id))
+    
+    thisPrediction <- 
+      mutate(fold.test, Prediction = predict(regression, fold.test, type = "response"))
+    
+    allPredictions <-
+      rbind(allPredictions, thisPrediction)
+    
+  }
+  return(st_sf(allPredictions))
+}
+
+# Iterate Thresholds Chapter 6, 7 (left in Chapters)
+iterateThresholds <- function(data, observedClass, predictedProbs, group) {
+  #This function takes as its inputs, a data frame with an observed binomial class (1 or 0); a vector of predicted #probabilities; and optionally a group indicator like race. It returns accuracy plus counts and rates of confusion matrix #outcomes. It's a bit verbose because of the if (missing(group)). I don't know another way to make an optional parameter.
+  observedClass <- enquo(observedClass)
+  predictedProbs <- enquo(predictedProbs)
+  group <- enquo(group)
+  x = .01
+  all_prediction <- data.frame()
+  
+  if (missing(group)) {
+    
+    while (x <= 1) {
+      this_prediction <- data.frame()
+      
+      this_prediction <-
+        data %>%
+        mutate(predclass = ifelse(!!predictedProbs > x, 1,0)) %>%
+        count(predclass, !!observedClass) %>%
+        summarize(Count_TN = sum(n[predclass==0 & !!observedClass==0]),
+                  Count_TP = sum(n[predclass==1 & !!observedClass==1]),
+                  Count_FN = sum(n[predclass==0 & !!observedClass==1]),
+                  Count_FP = sum(n[predclass==1 & !!observedClass==0]),
+                  Rate_TP = Count_TP / (Count_TP + Count_FN),
+                  Rate_FP = Count_FP / (Count_FP + Count_TN),
+                  Rate_FN = Count_FN / (Count_FN + Count_TP),
+                  Rate_TN = Count_TN / (Count_TN + Count_FP),
+                  Accuracy = (Count_TP + Count_TN) / 
+                    (Count_TP + Count_TN + Count_FN + Count_FP)) %>%
+        mutate(Threshold = round(x,2))
+      
+      all_prediction <- rbind(all_prediction,this_prediction)
+      x <- x + .01
+    }
+    return(all_prediction)
+  }
+  else if (!missing(group)) { 
+    while (x <= 1) {
+      this_prediction <- data.frame()
+      
+      this_prediction <-
+        data %>%
+        mutate(predclass = ifelse(!!predictedProbs > x, 1,0)) %>%
+        group_by(!!group) %>%
+        count(predclass, !!observedClass) %>%
+        summarize(Count_TN = sum(n[predclass==0 & !!observedClass==0]),
+                  Count_TP = sum(n[predclass==1 & !!observedClass==1]),
+                  Count_FN = sum(n[predclass==0 & !!observedClass==1]),
+                  Count_FP = sum(n[predclass==1 & !!observedClass==0]),
+                  Rate_TP = Count_TP / (Count_TP + Count_FN),
+                  Rate_FP = Count_FP / (Count_FP + Count_TN),
+                  Rate_FN = Count_FN / (Count_FN + Count_TP),
+                  Rate_TN = Count_TN / (Count_TN + Count_FP),
+                  Accuracy = (Count_TP + Count_TN) / 
+                    (Count_TP + Count_TN + Count_FN + Count_FP)) %>%
+        mutate(Threshold = round(x,2))
+      
+      all_prediction <- rbind(all_prediction,this_prediction)
+      x <- x + .01
+    }
+    return(all_prediction)
+  }
+}
+
+# Iterate Fairness Chapter 7 (left in chapter)
+iterateFairness <- function(data, regression, threshold.by) {
+  #create a table of all possible threshold combinations and input how many different thresholds to test.
+  all.combos <- expand.grid(group1 = seq(0.1 , 1, threshold.by), group2 = seq(0.1,1 ,threshold.by))
+  all_prediction <- data.frame()
+  #while `counter` is less than the number of possible threshold combinations 
+  counter = 1
+  while (counter <= nrow(all.combos)) {
+    this_prediction <- data.frame()
+    #choose the next i thresholds    
+    group1.thresh <- all.combos[counter,1]
+    group2.thresh <- all.combos[counter,2]
+    #create a temporary table that includes the predicted probability    
+    this_prediction <- data.frame(
+      observed = data[["Recidivated"]],
+      probs = predict(regression, data, type="response"),
+      race = data[["race"]]) %>%
+      mutate(predicted = 
+               case_when(race == "African-American" & probs >= group1.thresh  ~ "Recidivate",
+                         race == "Caucasian" & probs >= group2.thresh  ~ "Recidivate",
+                         TRUE ~"notRecidivate"),
+             predicted = as.factor(predicted)) %>%
+      #calculate fairness metrics
+      group_by(race) %>%
+      count(predicted,observed) %>%
+      summarize(True_Negative = sum(n[predicted=="notRecidivate" & observed=="notRecidivate"]),
+                True_Positive = sum(n[predicted=="Recidivate" & observed=="Recidivate"]),
+                False_Negative = sum(n[predicted=="notRecidivate" & observed=="Recidivate"]),
+                False_Positive = sum(n[predicted=="Recidivate" & observed=="notRecidivate"]),
+                False_Positive_Rate = False_Positive / (False_Positive + True_Negative),
+                False_Negative_Rate = False_Negative / (False_Negative + True_Positive),
+                Accuracy = (True_Negative + True_Positive) /  
+                  (True_Negative + True_Positive + False_Negative + False_Positive)) %>%
+      mutate(threshold = paste(group1.thresh, group2.thresh, sep=", "))
+    #store this outcome on a larger table
+    all_prediction <- rbind(all_prediction,this_prediction)
+    #iterate     
+    counter <- counter + 1
+  }
+  #return fairness metrics for all threshold combinations
+  return(all_prediction)
+}  
+
+
+
+function(dataset, id, dependentVariable, indVariables) {
+  
+  allPredictions <- data.frame()
+  cvID_list <- unique(dataset[[id]])
+  
+  for (i in cvID_list) {
+    
+    thisFold <- i
+    cat("This hold out fold is", thisFold, "\n")
+    
+    fold.train <- filter(dataset, dataset[[id]] != thisFold) %>% as.data.frame() %>% 
+      dplyr::select(id, geometry, indVariables, dependentVariable)
+    fold.test  <- filter(dataset, dataset[[id]] == thisFold) %>% as.data.frame() %>% 
+      dplyr::select(id, geometry, indVariables, dependentVariable)
+    
+    regression <- glm(paste0(dependentVariable,"~."), family = "poisson", 
+    data = fold.train %>% dplyr::select(-geometry, -id))
+    
+    thisPrediction <- 
+      mutate(fold.test, Prediction = predict(regression, fold.test, type = "response"))
+    
+    allPredictions <-
+      rbind(allPredictions, thisPrediction)
+    
+  }
+  return(st_sf(allPredictions))
+}
+
+```
+
+#Setup
+```{r setup, include=FALSE}
+#Vehicle crash data for Chicago
+
+traffic_crash <- st_read("https://data.cityofchicago.org/api/geospatial/85ca-t3if?method=export&format=GeoJSON") %>% filter(crash_type == "INJURY AND / OR TOW DUE TO CRASH") %>% mutate(year = substr(crash_date,1,4)) %>% filter(year == "2018" & most_severe_injury %in% c('FATAL', 'INCAPACITATING INJURY', 'NONINCAPACITATING INJURY'))%>% st_transform('ESRI:102271') %>% 
+    distinct()
+
+#-----Chicago's boundary-----
+chicagoBoundary <- 
+  st_read("https://data.cityofchicago.org/api/geospatial/ewy2-6yfk?method=export&format=GeoJSON") %>%
+  st_transform('ESRI:102271')
+
+
+#-----Map vehicle crash data-----
+options(scipen=10000)
+
+grid.arrange(ncol = 2,
+  ggplot()+
+    geom_sf(data = chicagoBoundary) +
+    geom_sf(data = traffic_crash, size = .5, color = "#440154FF") +
+    labs(title = 'Traffic Crashes in Chicago, 2019')+
+    mapTheme(),
+  ggplot()+
+    geom_sf(data = chicagoBoundary, fill = "#D4D4D4") +
+    stat_density2d(data = data.frame(st_coordinates(traffic_crash)),
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = .01, bins = 40, geom = 'polygon') +
+    scale_fill_viridis() +
+    scale_alpha(range = c(0.00, 0.35), guide = "none") +
+    labs(title = 'Density of traffic crashes in Chicago, 2019') +
+    mapTheme()+
+    theme(legend.position = 'right'))
+
+```
+
+
+#Data Wrangling: Creating the Fishnet
+```{r Fishnet, include=FALSE}
+## R Markdown
+
+#-----Fishnet-----
+fishnet <- st_make_grid(chicagoBoundary, cellsize = 500, square = TRUE) %>% 
+  .[chicagoBoundary] %>%
+  st_sf() %>%
+  mutate(uniqueID = rownames(.))
+
+#-----Count traffic crashes in fishnet-----
+crash_net = 
+  dplyr::select(traffic_crash) %>%
+  mutate(traffic_crash_count = 1) %>%
+  aggregate(., fishnet, sum) %>%
+  mutate(traffic_crash_count = replace_na(traffic_crash_count, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+
+#---Plot traffic crashes by grid cell-----
+ggplot(data = crash_net) +
+  geom_sf(aes(fill = traffic_crash_count), color = NA) +
+  scale_fill_viridis()+
+  labs(title = 'Traffic Crash Counts by fishnet, 2019') +
+  mapTheme()
+
+```
+
+#Wrangling Risk Factors
+```{r Risk Factors, echo=FALSE}
+#-----Risk factors-----
+
+#311streetlights
+streetLightsOut <- 
+  read.socrata("https://data.cityofchicago.org/Service-Requests/311-Service-Requests-Street-Lights-All-Out/zuxi-7xem") %>%
+    mutate(year = substr(creation_date,1,4)) %>% filter(year == "2018") %>%
+    dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Street_Lights_Out")
+
+#liquor stores
+liquorRetail <- 
+  read.socrata("https://data.cityofchicago.org/resource/nrmj-3kcf.json") %>%  
+    filter(business_activity == "Retail Sales of Packaged Liquor") %>%
+    dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Liquor_Retail")
+
+#311 potholes
+potholes <- 
+  read.socrata("https://data.cityofchicago.org/resource/_311-potholes.json") %>% 
+    mutate(year = substr(creation_date,1,4)) %>% filter(year == "2018") %>%
+    dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Potholes")
+
+#red light crossings
+redlight <- 
+  read.socrata("https://data.cityofchicago.org/resource/spqx-js37.json") %>% 
+  mutate(year = substr(violation_date,1,4)) %>% filter(year == "2018")%>%
+    dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Red_Light_Crossings")
+
+
+#speed camera violations
+speedcamera <- 
+  read.socrata("https://data.cityofchicago.org/resource/hhkd-xvj4.json") %>%
+  mutate(year = substr(violation_date,1,4)) %>% filter(year == "2018")%>%
+    dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Speed_Camera_Violations")
+
+
+#bus stops
+busstops <- 
+  st_read("~/GitHub/MUSA-508/CTA_BusStops/CTA_BusStops.shp") %>% 
+  st_transform('ESRI:102271')
+
+neighborhoods <- 
+  st_read("https://raw.githubusercontent.com/blackmad/neighborhoods/master/chicago.geojson") %>%
+  st_transform(st_crs(fishnet)) 
+
+#-----Count of Risk Factors by Fishnet-----
+
+vars_net <-
+  bind_rows(streetLightsOut, liquorRetail, potholes, redlight, speedcamera, busstops)%>%
+  st_join(., fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID, Legend) %>%
+  summarize(count = n()) %>%
+  full_join(fishnet) %>%
+  spread(Legend, count, fill=0) %>%
+  st_sf() %>%
+  dplyr::select(-`<NA>`) %>%
+  na.omit() %>%
+  ungroup()
+
+vars_net.long <- 
+  gather(vars_net, Variable, value, -geometry, -uniqueID)
+
+vars <- unique(vars_net.long$Variable)
+mapList <- list()
+
+for(i in vars){
+  mapList[[i]] <- 
+    ggplot() +
+    geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
+    scale_fill_viridis(name="") +
+    labs(title=i) +
+    mapTheme()}
+
+do.call(grid.arrange,c(mapList, ncol=2, top="Risk Factors by Fishnet"))
+
+```
+#Fishnet
+```{r S, echo=FALSE}
+#-----Feature Engineering - Nearest Neighbors-----
+st_c <- st_coordinates
+st_coid <- st_centroid
+
+vars_net <-
+  vars_net %>%
+    mutate(
+      streetLightsOut.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(streetLightsOut),3),
+      liquorRetail.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(liquorRetail),3),
+      potholes.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(potholes),3),
+      redlight.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(redlight),3),
+      speedcamera.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(speedcamera),3),
+      busstops.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(busstops),3))
+
+vars_net.long.nn <- 
+  dplyr::select(vars_net, ends_with(".nn")) %>%
+    gather(Variable, value, -geometry)
+
+vars <- unique(vars_net.long.nn$Variable)
+mapList <- list()
+
+for(i in vars){
+  mapList[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(vars_net.long.nn, Variable == i), aes(fill=value), colour=NA) +
+      scale_fill_viridis(name="") +
+      labs(title=i) +
+      mapTheme()}
+
+do.call(grid.arrange,c(mapList, ncol = 3, top = "Nearest Neighbor risk Factors by Fishnet"))
+```
+
+#Exploring the Spatial Process: Local Moran's I
+
+```{r S, echo=FALSE}
+
+## important to drop the geometry from joining features
+final_net <-
+  left_join(crash_net, st_drop_geometry(vars_net), by="uniqueID") 
+
+final_net <-
+  st_centroid(final_net) %>%
+    st_join(dplyr::select(neighborhoods, name), by = "uniqueID") %>%
+    #st_join(dplyr::select(policeDistricts, District), by = "uniqueID") %>%
+      st_drop_geometry() %>%
+      left_join(dplyr::select(final_net, geometry, uniqueID)) %>%
+      st_sf() %>%
+  na.omit()
+## generates warnings from PROJ issues
+## {spdep} to make polygon to neighborhoods... 
+final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE)
+## ... and neighborhoods to list of weigths
+final_net.weights <- nb2listw(final_net.nb, style="W", zero.policy=TRUE)
+
+# print(final_net.weights, zero.policy=TRUE)
+## see ?localmoran
+local_morans <- localmoran(final_net$traffic_crash_count, final_net.weights, zero.policy=TRUE) %>% 
+  as.data.frame()
+
+# join local Moran's I results to fishnet
+final_net.localMorans <- 
+  cbind(local_morans, as.data.frame(final_net)) %>% 
+  st_sf() %>%
+  dplyr::select(traffic_crash_count = traffic_crash_count, 
+                Local_Morans_I = Ii, 
+                P_Value = `Pr(z != E(Ii))`) %>%
+  mutate(Significant_Hotspots = ifelse(P_Value <= 0.001, 1, 0)) %>%
+  gather(Variable, Value, -geometry)
+
+vars <- unique(final_net.localMorans$Variable)
+varList <- list()
+
+for(i in vars){
+  varList[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(final_net.localMorans, Variable == i), 
+              aes(fill = Value), colour=NA) +
+      scale_fill_viridis(name="") +
+      labs(title=i) +
+      mapTheme(title_size = 14) + theme(legend.position="bottom")}
+
+do.call(grid.arrange,c(varList, ncol = 4, top = "Local Morans I statistics, Traffic Crash"))
+
+```
+
+#Correlation 
+```{r S, echo=FALSE}
+correlation.long <-
+  st_drop_geometry(final_net) %>%
+    dplyr::select(-uniqueID, -cvID, -name) %>%
+    gather(Variable, Value, -traffic_crash_count)
+
+correlation.cor <-
+  correlation.long %>%
+    group_by(Variable) %>%
+    summarize(correlation = cor(Value, traffic_crash_count, use = "complete.obs"))
+    
+ggplot(correlation.long, aes(Value, traffic_crash_count)) +
+  geom_point(size = 0.1) +
+  geom_text(data = correlation.cor, aes(label = paste("r =", round(correlation, 2))),
+            x=-Inf, y=Inf, vjust = 1.5, hjust = -.1) +
+  geom_smooth(method = "lm", se = FALSE, colour = "black") +
+  facet_wrap(~Variable, ncol = 2, scales = "free") +
+  labs(title = "Traffic crash as a function of risk factors") +
+  plotTheme()
+
+```
+
+#Cross Validation
+```{r S, echo=FALSE}
+
+#Histogram of Dependent Variable
+ggplot(final_net, aes(traffic_crash_count)) + 
+  geom_histogram(binwidth = 1) +
+  labs(title = "Traffic Crashes Distribution")
+
+
+## define the variables we want
+reg.ss.vars <- c("potholes.nn", "redlight.nn", "speedcamera.nn","streetLightsOut.nn")
+
+## RUN REGRESSIONS
+reg.ss.spatialCV <- crossValidate(
+  dataset = final_net,
+  id = "name",                           
+  dependentVariable = "traffic_crash_count",
+  indVariables = reg.ss.vars) %>%
+    dplyr::select(cvID = name, traffic_crash_count, Prediction, geometry)
+
+# calculate errors by NEIGHBORHOOD
+error_by_reg_and_fold <- 
+  reg.ss.spatialCV %>%
+    group_by(cvID) %>% 
+    summarize(Mean_Error = mean(Prediction - traffic_crash_count, na.rm = T),
+              MAE = mean(abs(Mean_Error), na.rm = T),
+              SD_MAE = mean(abs(Mean_Error), na.rm = T)) %>%
+  ungroup()
+
+error_by_reg_and_fold %>% 
+  arrange(desc(MAE))
+error_by_reg_and_fold %>% 
+  arrange(MAE)
+
+## plot histogram of OOF (out of fold) errors
+error_by_reg_and_fold %>%
+  ggplot(aes(MAE)) + 
+    geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
+  scale_x_continuous(breaks = seq(0, 11, by = 1)) + 
+    labs(title="Distribution of MAE", subtitle = "LOGO-CV",
+         x="Mean Absolute Error", y="Count") 
+```
+
+
+```{r S, echo=FALSE}
+st_drop_geometry(error_by_reg_and_fold) %>%
+  group_by(Regression) %>% 
+  summarize(Mean_MAE = round(mean(MAE), 2),
+            SD_MAE = round(sd(MAE), 2)) %>%
+  kable() %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(2, color = "black", background = "#FDE725FF") %>%
+  row_spec(4, color = "black", background = "#FDE725FF") 
+```
+
+#Race context
+```{r by race, echo=FALSE}
+# Load census API key
+census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
+
+#Load list of variables
+acs_variable_list.2018 <- load_variables(2018,"acs5")
+
+
+tracts18 <- 
+  get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E"), 
+          year = 2018, state=17, county=031, geometry=T) %>%
+  st_transform('ESRI:102271')  %>% 
+  dplyr::select(variable, estimate, GEOID) %>%
+  spread(variable, estimate) %>%
+  rename(TotalPop = B01001_001,
+         NumberWhites = B01001A_001) %>%
+  mutate(percentWhite = NumberWhites / TotalPop,
+         raceContext = ifelse(percentWhite > .5, "Majority_White", "Majority_Non_White")) %>%
+  .[neighborhoods,]
+
+reg.summary %>% 
+  filter(str_detect(Regression, "LOGO")) %>%
+  st_centroid() %>%
+  st_join(tracts18) %>%
+  na.omit() %>%
+  st_drop_geometry() %>%
+  group_by(Regression, raceContext) %>%
+  summarize(mean.Error = mean(Error, na.rm = T)) %>%
+  spread(raceContext, mean.Error) %>%
+  kable(caption = "Mean Error by neighborhood racial context") %>%
+  kable_styling("striped", full_width = F)  
+```  
+
+#Kernel Density & Risk Prediction
+```{r by kernel density, echo=FALSE}
+traffic_crash19 <- st_read("https://data.cityofchicago.org/api/geospatial/85ca-t3if?method=export&format=GeoJSON") %>% filter(crash_type == "INJURY AND / OR TOW DUE TO CRASH") %>% mutate(year = substr(crash_date,1,4)) %>% filter(year == "2019" & most_severe_injury %in% c('FATAL', 'INCAPACITATING INJURY', 'NONINCAPACITATING INJURY'))%>% st_transform('ESRI:102271') %>% 
+    distinct()%>% 
+  .[fishnet,]
+
+crash_KDE_sf <- as.data.frame(crash_KD.1000) %>%
+  st_as_sf(coords = c("x", "y"), crs = st_crs(final_net)) %>%
+  aggregate(., final_net, mean) %>%
+  mutate(label = "Kernel Density",
+         Risk_Category = ntile(value, 100),
+         Risk_Category = case_when(
+           Risk_Category >= 90 ~ "90% to 100%",
+           Risk_Category >= 70 & Risk_Category <= 89 ~ "70% to 89%",
+           Risk_Category >= 50 & Risk_Category <= 69 ~ "50% to 69%",
+           Risk_Category >= 30 & Risk_Category <= 49 ~ "30% to 49%",
+           Risk_Category >= 1 & Risk_Category  <= 29 ~ "1% to 29%")) %>%
+  cbind(
+    aggregate(
+      dplyr::select(traffic_crash18) %>% mutate(traffic_crash_count= 1), ., sum) %>%
+    mutate(traffic_crash_count = replace_na(traffic_crash_count, 0))) %>%
+  dplyr::select(label, Risk_Category, traffic_crash_count)
+
+crash_risk_sf <-
+  reg.ss.spatialCV %>%
+  mutate(label = "Risk Predictions",
+         Risk_Category = ntile(Prediction, 100),
+         Risk_Category = case_when(
+         Risk_Category >= 90 ~ "90% to 100%",
+         Risk_Category >= 70 & Risk_Category <= 89 ~ "70% to 89%",
+         Risk_Category >= 50 & Risk_Category <= 69 ~ "50% to 69%",
+         Risk_Category >= 30 & Risk_Category <= 49 ~ "30% to 49%",
+         Risk_Category >= 1 & Risk_Category <= 29 ~ "1% to 29%")) %>%
+  cbind(
+    aggregate(
+      dplyr::select(traffic_crash18) %>% mutate(traffic_crash_count = 1), ., sum) %>%
+      mutate(traffic_crash_count = replace_na(traffic_crash_count, 0))) %>%
+  dplyr::select(label,Risk_Category, traffic_crash_count)
+
+rbind(crash_KDE_sf, crash_risk_sf) %>%
+  na.omit() %>%
+  gather(Variable, Value, -label, -Risk_Category, -geometry) %>%
+  ggplot() +
+    geom_sf(aes(fill = Risk_Category), colour = NA) +
+    geom_sf(data = sample_n(traffic_crash18, 3000), size = .5, colour = "black") +
+    facet_wrap(~label, ) +
+    scale_fill_viridis(discrete = TRUE) +
+    labs(title="Comparison of Kernel Density and Risk Predictions",
+         subtitle="2018 traffic crash risk predictions; 2019 traffic crash") +
+    mapTheme(title_size = 14)
+```
+
+```{r by plot, echo=FALSE}
+rbind(crash_KDE_sf, crash_risk_sf) %>%
+  st_set_geometry(NULL) %>% na.omit() %>%
+  gather(Variable, Value, -label, -Risk_Category) %>%
+  group_by(label, Risk_Category) %>%
+  summarize(traffic_crash_count = sum(Value)) %>%
+  ungroup() %>%
+  group_by(label) %>%
+  mutate(Rate_of_test_set_crash = traffic_crash_count / sum(traffic_crash_count)) %>%
+    ggplot(aes(Risk_Category,Rate_of_test_set_crash)) +
+      geom_bar(aes(fill=label), position="dodge", stat="identity") +
+      scale_fill_viridis(discrete = TRUE) +
+      labs(title = "Risk prediction vs. Kernel density, 2019 traffic crash") +
+      theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+
+```
+#Conclusion
