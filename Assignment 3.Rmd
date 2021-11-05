@@ -669,10 +669,9 @@ error_by_reg_and_fold <-
               SD_MAE = mean(abs(Mean_Error), na.rm = T)) %>%
   ungroup()
 
-error_by_reg_and_fold %>% 
-  arrange(desc(MAE))
-error_by_reg_and_fold %>% 
-  arrange(MAE)
+error_by_reg_and_fold %>% arrange(desc(MAE))
+
+error_by_reg_and_fold %>% arrange(MAE)
 
 ## plot histogram of OOF (out of fold) errors
 error_by_reg_and_fold %>%
@@ -686,13 +685,14 @@ error_by_reg_and_fold %>%
 
 ```{r S, echo=FALSE}
 st_drop_geometry(error_by_reg_and_fold) %>%
-  group_by(Regression) %>% 
+  group_by(reg.ss.spatialCV) %>% 
   summarize(Mean_MAE = round(mean(MAE), 2),
             SD_MAE = round(sd(MAE), 2)) %>%
   kable() %>%
   kable_styling("striped", full_width = F) %>%
   row_spec(2, color = "black", background = "#FDE725FF") %>%
   row_spec(4, color = "black", background = "#FDE725FF") 
+
 ```
 
 #Race context
@@ -716,8 +716,12 @@ tracts18 <-
          raceContext = ifelse(percentWhite > .5, "Majority_White", "Majority_Non_White")) %>%
   .[neighborhoods,]
 
+
+
+
+
 reg.summary %>% 
-  filter(str_detect(Regression, "LOGO")) %>%
+  filter(str_detect(reg.ss.spatialCV, "LOGO")) %>%
   st_centroid() %>%
   st_join(tracts18) %>%
   na.omit() %>%
@@ -731,6 +735,7 @@ reg.summary %>%
 
 #Kernel Density & Risk Prediction
 ```{r by kernel density, echo=FALSE}
+
 traffic_crash19 <- st_read("https://data.cityofchicago.org/api/geospatial/85ca-t3if?method=export&format=GeoJSON") %>% filter(crash_type == "INJURY AND / OR TOW DUE TO CRASH") %>% mutate(year = substr(crash_date,1,4)) %>% filter(year == "2019" & most_severe_injury %in% c('FATAL', 'INCAPACITATING INJURY', 'NONINCAPACITATING INJURY'))%>% st_transform('ESRI:102271') %>% 
     distinct()%>% 
   .[fishnet,]
