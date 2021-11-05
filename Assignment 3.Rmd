@@ -6,6 +6,8 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+update.packages("spatstat")
+
 library(tidyverse)
 library(sf)
 library(RSocrata)
@@ -651,8 +653,16 @@ ggplot(final_net, aes(traffic_crash_count)) +
 
 ## define the variables we want
 reg.ss.vars <- c("potholes.nn", "redlight.nn", "speedcamera.nn","streetLightsOut.nn")
+
+## Random Reg
+reg.ss.cv <- crossValidate.1(
+  dataset = final_net,
+  id = "cvID",
+  dependentVariable = "traffic_crash_count",
+  indVariables = reg.ss.vars) %>%
+    dplyr::select(cvID = cvID, traffic_crash_count, Prediction, geometry)
   
-## RUN REGRESSIONS
+## Spatial Reg
 reg.ss.spatialCV <- crossValidate.1(
   dataset = final_net,
   id = "name",                           
@@ -660,13 +670,22 @@ reg.ss.spatialCV <- crossValidate.1(
   indVariables = reg.ss.vars) %>%
     dplyr::select(cvID = name, traffic_crash_count, Prediction, geometry)
 
+
+#Bind of observed and predicted counts and errors
+reg.summary <-
+    rbind(mutate(reg.ss.cv, Error = Prediction - traffic_crash_count,
+                             Regression = "Random k-fold CV: Spatial Process"),
+            mutate(reg.ss.spatialCV, Error = Prediction - traffic_crash_count,
+                             Regression = "Spatial LOGO-CV: Spatial Process")) %>%
+    st_sf() 
+
 # calculate errors by NEIGHBORHOOD
 error_by_reg_and_fold <- 
-  reg.ss.spatialCV %>%
-    group_by(cvID) %>% 
-    summarize(Mean_Error = mean(Prediction - traffic_crash_count, na.rm = T),
-              MAE = mean(abs(Mean_Error), na.rm = T),
-              SD_MAE = mean(abs(Mean_Error), na.rm = T)) %>%
+  reg.summary %>%
+  group_by(Regression, cvID) %>% 
+  summarize(Mean_Error = mean(Prediction - traffic_crash_count, na.rm = T),
+            MAE = mean(abs(Mean_Error), na.rm = T),
+            SD_MAE = mean(abs(Mean_Error), na.rm = T)) %>%
   ungroup()
 
 error_by_reg_and_fold %>% arrange(desc(MAE))
@@ -685,14 +704,12 @@ error_by_reg_and_fold %>%
 
 ```{r S, echo=FALSE}
 st_drop_geometry(error_by_reg_and_fold) %>%
-  group_by(reg.ss.spatialCV) %>% 
-  summarize(Mean_MAE = round(mean(MAE), 2),
-            SD_MAE = round(sd(MAE), 2)) %>%
-  kable() %>%
-  kable_styling("striped", full_width = F) %>%
-  row_spec(2, color = "black", background = "#FDE725FF") %>%
-  row_spec(4, color = "black", background = "#FDE725FF") 
-
+  group_by(Regression) %>% 
+  summarize(Mean_MAE = round(mean(MAE), 2),SD_MAE = round(sd(MAE), 2)) %>%
+kable() %>%
+    kable_styling("striped", full_width = F) %>%
+    row_spec(2, color = "black", background = "#FDE725FF") %>%
+  
 ```
 
 #Race context
@@ -702,7 +719,6 @@ census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrit
 
 #Load list of variables
 acs_variable_list.2018 <- load_variables(2018,"acs5")
-
 
 tracts18 <- 
   get_acs(geography = "tract", variables = c("B01001_001E","B01001A_001E"), 
@@ -716,12 +732,8 @@ tracts18 <-
          raceContext = ifelse(percentWhite > .5, "Majority_White", "Majority_Non_White")) %>%
   .[neighborhoods,]
 
-
-
-
-
 reg.summary %>% 
-  filter(str_detect(reg.ss.spatialCV, "LOGO")) %>%
+  filter(str_detect(Regression, "LOGO")) %>%
   st_centroid() %>%
   st_join(tracts18) %>%
   na.omit() %>%
@@ -730,7 +742,8 @@ reg.summary %>%
   summarize(mean.Error = mean(Error, na.rm = T)) %>%
   spread(raceContext, mean.Error) %>%
   kable(caption = "Mean Error by neighborhood racial context") %>%
-  kable_styling("striped", full_width = F)  
+  kable_styling("striped", full_width = F)
+
 ```  
 
 #Kernel Density & Risk Prediction
@@ -739,6 +752,13 @@ reg.summary %>%
 traffic_crash19 <- st_read("https://data.cityofchicago.org/api/geospatial/85ca-t3if?method=export&format=GeoJSON") %>% filter(crash_type == "INJURY AND / OR TOW DUE TO CRASH") %>% mutate(year = substr(crash_date,1,4)) %>% filter(year == "2019" & most_severe_injury %in% c('FATAL', 'INCAPACITATING INJURY', 'NONINCAPACITATING INJURY'))%>% st_transform('ESRI:102271') %>% 
     distinct()%>% 
   .[fishnet,]
+
+
+crash_ppp <- as.ppp(st_coordinates(traffic_crash), W = st_bbox(final_net))
+
+crash_KD.1000 <- spatstat::density.ppp(crash_ppp, 1000)
+crash_KD.1500 <- spatstat::density.ppp(crash_ppp, 1500)
+crash_KD.2000 <- spatstat::density.ppp(crash_ppp, 2000)
 
 crash_KDE_sf <- as.data.frame(crash_KD.1000) %>%
   st_as_sf(coords = c("x", "y"), crs = st_crs(final_net)) %>%
@@ -753,7 +773,7 @@ crash_KDE_sf <- as.data.frame(crash_KD.1000) %>%
            Risk_Category >= 1 & Risk_Category  <= 29 ~ "1% to 29%")) %>%
   cbind(
     aggregate(
-      dplyr::select(traffic_crash18) %>% mutate(traffic_crash_count= 1), ., sum) %>%
+      dplyr::select(traffic_crash) %>% mutate(traffic_crash_count= 1), ., sum) %>%
     mutate(traffic_crash_count = replace_na(traffic_crash_count, 0))) %>%
   dplyr::select(label, Risk_Category, traffic_crash_count)
 
@@ -769,7 +789,7 @@ crash_risk_sf <-
          Risk_Category >= 1 & Risk_Category <= 29 ~ "1% to 29%")) %>%
   cbind(
     aggregate(
-      dplyr::select(traffic_crash18) %>% mutate(traffic_crash_count = 1), ., sum) %>%
+      dplyr::select(traffic_crash) %>% mutate(traffic_crash_count = 1), ., sum) %>%
       mutate(traffic_crash_count = replace_na(traffic_crash_count, 0))) %>%
   dplyr::select(label,Risk_Category, traffic_crash_count)
 
@@ -802,4 +822,6 @@ rbind(crash_KDE_sf, crash_risk_sf) %>%
       theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
 
 ```
+
+
 #Conclusion
