@@ -753,12 +753,11 @@ traffic_crash19 <- st_read("https://data.cityofchicago.org/api/geospatial/85ca-t
     distinct()%>% 
   .[fishnet,]
 
-
 crash_ppp <- as.ppp(st_coordinates(traffic_crash), W = st_bbox(final_net))
 
-crash_KD.1000 <- spatstat::density.ppp(crash_ppp, 1000)
-crash_KD.1500 <- spatstat::density.ppp(crash_ppp, 1500)
-crash_KD.2000 <- spatstat::density.ppp(crash_ppp, 2000)
+crash_KD.1000 <- spatstat.core::density.ppp(crash_ppp, 1000)
+crash_KD.1500 <- spatstat.core::density.ppp(crash_ppp, 1500)
+crash_KD.2000 <- spatstat.core::density.ppp(crash_ppp, 2000)
 
 crash_KDE_sf <- as.data.frame(crash_KD.1000) %>%
   st_as_sf(coords = c("x", "y"), crs = st_crs(final_net)) %>%
@@ -774,8 +773,8 @@ crash_KDE_sf <- as.data.frame(crash_KD.1000) %>%
   cbind(
     aggregate(
       dplyr::select(traffic_crash) %>% mutate(traffic_crash_count= 1), ., sum) %>%
-    mutate(traffic_crash_count = replace_na(traffic_crash_count, 0))) %>%
-  dplyr::select(label, Risk_Category, traffic_crash_count)
+      mutate(traffic_crash_count = replace_na(traffic_crash_count, 0))) %>%
+      dplyr::select(label, Risk_Category, traffic_crash_count)
 
 crash_risk_sf <-
   reg.ss.spatialCV %>%
@@ -791,22 +790,24 @@ crash_risk_sf <-
     aggregate(
       dplyr::select(traffic_crash) %>% mutate(traffic_crash_count = 1), ., sum) %>%
       mutate(traffic_crash_count = replace_na(traffic_crash_count, 0))) %>%
-  dplyr::select(label,Risk_Category, traffic_crash_count)
+      dplyr::select(label,Risk_Category, traffic_crash_count)
 
 rbind(crash_KDE_sf, crash_risk_sf) %>%
   na.omit() %>%
   gather(Variable, Value, -label, -Risk_Category, -geometry) %>%
   ggplot() +
     geom_sf(aes(fill = Risk_Category), colour = NA) +
-    geom_sf(data = sample_n(traffic_crash18, 3000), size = .5, colour = "black") +
+    geom_sf(data = sample_n(traffic_crash19, 3000), size = .5, colour = "black") +
     facet_wrap(~label, ) +
     scale_fill_viridis(discrete = TRUE) +
     labs(title="Comparison of Kernel Density and Risk Predictions",
          subtitle="2018 traffic crash risk predictions; 2019 traffic crash") +
     mapTheme(title_size = 14)
+
 ```
 
 ```{r by plot, echo=FALSE}
+#Bar plot
 rbind(crash_KDE_sf, crash_risk_sf) %>%
   st_set_geometry(NULL) %>% na.omit() %>%
   gather(Variable, Value, -label, -Risk_Category) %>%
@@ -820,8 +821,12 @@ rbind(crash_KDE_sf, crash_risk_sf) %>%
       scale_fill_viridis(discrete = TRUE) +
       labs(title = "Risk prediction vs. Kernel density, 2019 traffic crash") +
       theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
-
 ```
 
 
 #Conclusion
+
+Unfortunately, our model captures risk predictions below the kernel density at the two higher risk categories, making it an unreliable source to predict crashes. 
+
+
+
