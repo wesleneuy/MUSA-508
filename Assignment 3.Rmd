@@ -484,11 +484,16 @@ speedcamera <-
     st_transform(st_crs(fishnet)) %>%
     mutate(Legend = "Speed_Camera_Violations")
 
-
 #bus stops
 busstops <- 
   st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/CTA_BusStops/CTA_BusStops.shp") %>% 
-  st_transform('ESRI:102271')
+  st_transform('ESRI:102271') %>%
+  #dplyr::select(Y = latitude, X = longitude) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+  st_transform(st_crs(fishnet)) %>%
+  mutate(Legend = "Speed_Camera_Violations")
+  
 
 neighborhoods <- 
   st_read("https://raw.githubusercontent.com/blackmad/neighborhoods/master/chicago.geojson") %>%
@@ -620,7 +625,8 @@ do.call(grid.arrange,c(varList, ncol = 4, top = "Local Morans I statistics, Traf
 ```
 
 #Correlation 
-```{r S, echo=FALSE}
+```{r S, echo=FALSE, fig_width: 4, fig_height: 10}
+
 correlation.long <-
   st_drop_geometry(final_net) %>%
     dplyr::select(-uniqueID, -cvID, -name) %>%
@@ -636,7 +642,7 @@ ggplot(correlation.long, aes(Value, traffic_crash_count)) +
   geom_text(data = correlation.cor, aes(label = paste("r =", round(correlation, 2))),
             x=-Inf, y=Inf, vjust = 1.5, hjust = -.1) +
   geom_smooth(method = "lm", se = FALSE, colour = "black") +
-  facet_wrap(~Variable, ncol = 2, scales = "free") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
   labs(title = "Traffic crash as a function of risk factors") +
   plotTheme()
 
@@ -679,7 +685,7 @@ reg.summary <-
                              Regression = "Spatial LOGO-CV: Spatial Process")) %>%
     st_sf() 
 
-# calculate errors by NEIGHBORHOOD
+#Calculate errors by NEIGHBORHOOD
 error_by_reg_and_fold <- 
   reg.summary %>%
   group_by(Regression, cvID) %>% 
@@ -699,6 +705,7 @@ error_by_reg_and_fold %>%
   scale_x_continuous(breaks = seq(0, 11, by = 1)) + 
     labs(title="Distribution of MAE", subtitle = "LOGO-CV",
          x="Mean Absolute Error", y="Count") 
+
 ```
 
 
@@ -708,7 +715,7 @@ st_drop_geometry(error_by_reg_and_fold) %>%
   summarize(Mean_MAE = round(mean(MAE), 2),SD_MAE = round(sd(MAE), 2)) %>%
 kable() %>%
     kable_styling("striped", full_width = F) %>%
-    row_spec(2, color = "black", background = "#FDE725FF") %>%
+    row_spec(2, color = "black", background = "#FDE725FF")
   
 ```
 
