@@ -252,7 +252,7 @@ MBTABuffers <-
   rbind(
     st_buffer(MBTAStops, 804.6) %>%
       mutate(Legend = "Buffer") %>%
-      dplyr::select(Legend),
+      dplyr::select(Legend), 
     st_union(st_buffer(MBTAStops, 804.6)) %>%
       st_sf() %>%
       mutate(Legend = "Unioned Buffer"))
@@ -300,7 +300,6 @@ selectCentroids <-
   mutate(Selection_Type = "Select by Centroids")
 
 # ---- Visualizing The Selections ----
-
 myData  <- rbind(selectCentroids, clip) %>%
   rbind(., selection)
 
