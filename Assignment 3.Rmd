@@ -719,6 +719,25 @@ kable() %>%
   
 ```
 
+
+# Errors by LOGO-CV Regression
+
+```{r}
+
+error_by_reg_and_fold %>%
+  filter(str_detect(Regression, "LOGO")) %>%
+  ggplot() +
+    geom_sf(aes(fill = MAE)) +
+    facet_wrap(~Regression) +
+    scale_fill_viridis() +
+    labs(title = "Crash errors by LOGO-CV Regression") +
+    mapTheme() + theme(legend.position="bottom")
+
+```
+
+
+
+
 #Race context
 ```{r by race, echo=FALSE}
 # Load census API key
@@ -754,6 +773,8 @@ reg.summary %>%
 ```  
 
 #Kernel Density & Risk Prediction
+
+
 ```{r by kernel density, echo=FALSE}
 
 traffic_crash19 <- st_read("https://data.cityofchicago.org/api/geospatial/85ca-t3if?method=export&format=GeoJSON") %>% filter(crash_type == "INJURY AND / OR TOW DUE TO CRASH") %>% mutate(year = substr(crash_date,1,4)) %>% filter(year == "2019" & most_severe_injury %in% c('FATAL', 'INCAPACITATING INJURY', 'NONINCAPACITATING INJURY'))%>% st_transform('ESRI:102271') %>% 
