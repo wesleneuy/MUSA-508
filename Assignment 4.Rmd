@@ -1,3 +1,475 @@
+<<<<<<< HEAD
+---
+title: "Assignment 4"
+author: "Me"
+date: "11/4/2021"
+output: html_document
+---
+#Introduction
+
+```{r setup, include=FALSE}
+
+options(scipen=10000000)
+library(tidyverse)
+library(kableExtra)
+library(caret)
+library(knitr) 
+library(pscl)
+library(plotROC)
+library(pROC)
+library(lubridate)
+library(gridExtra)
+
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+windowsFonts(font = windowsFont('Franklin Gothic'))
+
+mapTheme <- function(base_size = 10, title_size = 12) {
+  theme(
+    text = element_text(family = 'font', color = "black"),
+    plot.title = element_text(family = 'font', size = title_size,colour = "black"),
+    plot.subtitle=element_text(family = 'font', face="italic"),
+    plot.caption=element_text(family = 'font', hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=.7),
+    strip.text.x = element_text(family = 'font', size = 9))
+}
+
+mapTheme2 <- function(base_size = 9, title_size = 10) {
+  theme(
+    text = element_text(family = 'font', color = "black"),
+    plot.title = element_text(family = 'font', size = title_size,colour = "black"),
+    plot.subtitle = element_text(family = 'font', face="italic"),
+    plot.caption=element_text(family = 'font', hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=.5),
+    strip.text.x = element_text(family = 'font', size = 10),
+    legend.text = element_text(family = 'font', size=8),
+    legend.title = element_text(family = 'font', size=9),
+    legend.background = element_blank(),
+    legend.key.size = unit(.3, 'line'))
+}
+
+plotTheme <- function(base_size = 10, title_size = 12){
+  theme(
+    text = element_text(family = 'font', color = "black"),
+    plot.title = element_text(family = 'font',
+                              size = title_size, colour = "black", hjust = 0.5), 
+    plot.subtitle = element_text(family = 'font', face = 'italic',
+                                 size = base_size, colour = "black", hjust = 0.5),
+    plot.caption = element_text(family = 'font', hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.01),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=.5),
+    strip.background = element_blank(),
+    strip.text = element_text(family = 'font', size=9),
+    axis.title = element_text(family = 'font', size=9),
+    axis.text = element_text(family = 'font', size=9),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(family = 'font', colour = "black", face = "italic"),
+    legend.text = element_text(family = 'font', colour = "black", face = "italic"),
+    strip.text.x = element_text(family = 'font', size = 9),
+    legend.key.size = unit(.3, 'line')
+  )
+}
+
+plotTheme2 <- function(base_size = 9, title_size = 10){
+  theme(
+    text = element_text(family = 'font', color = "black"),
+    plot.title = element_text(family = 'font',
+                              size = title_size, colour = "black", hjust = 0.5), 
+    plot.subtitle = element_text(family = 'font', face = 'italic',
+                                 size = base_size, colour = "black", hjust = 0.5),
+    plot.caption = element_text(family = 'font', hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.01),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=.5),
+    strip.background = element_blank(),
+    strip.text = element_text(family = 'font', size=9),
+    axis.title = element_text(family = 'font', size=9),
+    axis.text = element_text(family = 'font', size=7),
+    axis.text.y = element_text(family = 'font', size=7),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(family = 'font', colour = "black", face = "italic", size = 9),
+    legend.text = element_text(family = 'font', colour = "black", face = "italic"),
+    strip.text.x = element_text(family = 'font', size = 9),
+    legend.key.size = unit(.3, 'line')
+  )
+}
+
+#palette5 <- c("#324376", "#586ba4", "#f5dd90", "#ee964b", "#f95738")
+palette4 <- c("#113245", "#ed5958", "#f2b531", "#03878f")
+palette2 <- c("#113245", "#ed5958")
+
+housing <- read.csv("~/GitHub/MUSA-508/housingSubsidy.csv")
+
+housing <-
+  housing %>%
+  na.omit()
+```
+
+#Exploratory Analysis
+451 homeowners took the credit; 3668 did not take the credit
+campaign - the more times an individual has been contacted, they are less likely 
+to use the tax credit program. 
+previous - if individual has been contacted more times before this campaign, they
+are more likely to use the tax program
+inflation - higher inflation rate, less likely to use the tax credit program
+unemployment rate - 
+```{r Continuous}
+#Continuous- Numeric
+housing %>%
+  dplyr::select(y,age, unemploy_rate,inflation_rate, spent_on_repairs, campaign, previous, cons.price.idx,cons.conf.idx, pdays) %>%
+  gather(Variable, value, -y) %>%
+    ggplot(aes(y, value, fill=y)) + 
+      geom_bar(position = "dodge", stat = "summary", fun.y = "mean") + 
+      facet_wrap(~Variable, scales = "free") +
+      scale_fill_manual(values = palette2) +
+      labs(x="Used Credit", y="Value", 
+           title = "Figure 1: Feature associations with the likelihood of taking tax credit",
+           subtitle = "(continous outcomes)") +
+      theme(legend.position = "none")+
+  plotTheme()
+```
+No mortgage, no tax lien, full time residence not in philly - will accept tax credit
+```{r Yes or No}      
+# Yes/No
+housing %>%
+  dplyr::select(y,mortgage, taxbill_in_phl, taxLien) %>%
+  gather(Variable, value, -y) %>%
+  count(Variable, value, y) %>%
+    ggplot(aes(y, n, fill=y)) + 
+      geom_bar(position = "dodge", stat = "summary", fun.y = "mean") + 
+      facet_wrap(~Variable, scales = "free") +
+      scale_fill_manual(values = palette2) +
+      labs(x="Used Credit", y="Value", 
+           title = "Figure X: Feature associations with the likelihood of taking tax credit",
+           subtitle = "(Yes/No)") +
+      theme(legend.position = "none")+
+  plotTheme()
+```      
+
+```{r cars} 
+# Categorical
+housing %>% 
+  dplyr::select(y, job, marital, education, contact, month, day_of_week, poutcome) %>%
+  gather(Variable, value, -y) %>%
+  count(Variable, value, y) %>%
+  ggplot(aes(value, n, fill = y)) +   
+    geom_bar(position = "dodge", stat="identity") +
+    facet_wrap(~Variable, scales="free") +
+    scale_fill_manual(values = palette2) +
+    labs(x="Took Credit", y="Count",
+         title = "Figure 3: Feature associations with the likelihood of taking tax credit",
+         subtitle = "Multiple category features") +
+    theme(axis.text.x = element_text(angle=45, hjust=1))+
+  plotTheme()
+```
+#Feature Engineering
+```{r cars}
+
+# Age Groups         
+housing <-
+  housing %>%
+  mutate(age = case_when(
+    age >= 18 & age < 35  ~ "Young Adults",
+    age >= 35 & age < 55  ~ "Middle-aged Adults",
+    age >= 55  ~ "Older Adults"))
+
+# Previous Program Contact
+housing <-
+  housing %>%
+  mutate(pdays = case_when(pdays == 999 ~ "Not Contacted",
+                             TRUE  ~ "Contacted"))
+#campaign
+housing <-
+  housing %>%
+  mutate(campaign = case_when(
+    campaign == 1   ~ "1",
+    campaign == 2  ~ "2",
+    campaign >= 3  ~ "At least 3"))
+
+# Education
+housing <-
+  housing %>%
+  mutate(education = case_when(
+    education == "basic.9y" |education == "basic.6y" | education == "basic.4y" ~ "Less Than HS",
+    education == "high.school"  ~ "High School",
+    education == "university.degree" |education == "professional.course"  ~ "Higher Education",
+    education == "unknown" |education == "illiterate"  ~ "Other"))
+
+
+
+#Did not run this part 
+# Season
+housing <-
+  housing %>%
+  mutate(Season = case_when(
+    month == "dec" |month == "jan" | month == "feb" ~ "Winter",
+    month == "mar" |month == "apr" | month == "may" ~ "Spring",
+    month == "jun" |month == "jul" | month == "aug" ~ "Summer",
+    month == "sep" |month == "oct" | month == "nov" ~ "Fall"))
+
+# Employment Status
+housing <- 
+  housing %>% 
+  mutate(EmploymentStatus = case_when(job == "student" | job == "unemployed" | job == "retired" ~ "unemployed", TRUE  ~ "employed"))
+
+```
+
+#Building a logit model
+```{r cars}
+
+set.seed(3456)
+trainIndex <- createDataPartition(y = paste(housing$taxLien), p = .65, list = FALSE, times = 1)
+
+housingTrain <- housing[ trainIndex,]
+housingTest  <- housing[-trainIndex,]
+
+#Did not run this regression
+reg1 <- glm(y_numeric ~ .,
+                  data=housingTrain %>% 
+                    dplyr::select(-age, marital, -mortgage, -contact, -day_of_week, -pdays, -y, -unemploy_rate, -education), family="binomial" (link="logit"))
+
+#Used this instead
+reg1 <- glm(y_numeric ~ .,
+                   data=housingTrain %>% 
+                   dplyr::select(-cons.price.idx, -cons.conf.idx, -y, -spent_on_repairs, -previous), family="binomial" (link="logit"))
+
+summary(reg1)
+
+reg1 %>%
+ # tidy() %>%
+  kable(
+    caption = "Table 1. ", 
+    #col.names = c("Predictor", "Estimate", "Std.Err", "t-stat", "p-value"), 
+   # digits = c(0, 2, 3, 2, 3),
+    #align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling() 
+
+```
+#Distribution of predicted probabilities
+```{r , echo=FALSE}
+testProbs = data.frame(observed = as.factor(housingTest$y_numeric),
+                       probs = predict(reg1, housingTest, type = 'response'))
+
+ggplot(testProbs, aes(x = probs, fill = as.factor(observed))) +
+  geom_density() +
+  facet_grid(observed ~ ., labeller = ) +
+  scale_fill_manual(values = palette2, name = 'Take credit',
+                    labels = c('No', 'Yes')) +
+  labs(x = 'Predicted probability of taking credit', 
+       y = 'Density of probability',
+       title = 'Distribution of predicted probabilities by observed outcome') +
+  xlim(0, 1) +
+  ylim(0, 23) +
+  plotTheme2()
+```
+
+#ROC curve
+```{r , echo=FALSE}
+testProbs <- 
+  testProbs %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$probs > 0.5 , 1, 0)))
+
+
+caret::confusionMatrix(testProbs$predOutcome, testProbs$observed,
+                       positive = "1")
+
+ggplot(testProbs, aes(d = as.numeric(testProbs$observed), m = probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#ed5958") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - churn model") +
+  plotTheme2()
+
+pROC::auc(testProbs$observed, testProbs$probs)
+```
+#Cross Validation
+```{r , echo=FALSE}
+ctrl <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
+
+
+cvFit <- train(y ~ .,
+                  data = housing %>% 
+                    na.omit() %>%
+                    dplyr::select(-cons.price.idx, -cons.conf.idx, -y_numeric, -spent_on_repairs, -previous),
+                method="glm", family="binomial",
+                metric="ROC", trControl = ctrl) 
+
+cvFit
+
+
+  dplyr::select(cvFit$resample, -Resample) %>%
+  gather(metric, value) %>%
+  left_join(gather(cvFit$results[2:4], metric, mean)) %>%
+  ggplot(aes(value)) + 
+  geom_histogram(bins=35, fill = palette2) +
+  facet_wrap(~metric) +
+  geom_vline(aes(xintercept = mean), colour = palette2, linetype = 3, size = 1.5) +
+  scale_x_continuous(limits = c(0, 1)) +
+  labs(x="Goodness of Fit", y="Count", title="Figure X: CV Goodness of Fit Metrics",
+       subtitle = "Across-fold mean reprented as dotted lines")
+
+```
+
+#Cost Benefit Analysis
+
+Assumptions:
+$2,850 HCD allocation per homeowner
+25% of contacted eligible homeowners take the credit
+$5000 credit cost per homeowner
+Houses that transacted after taking the credit sold with $10,000 premium
+
+True Negative Revenue - Predicted correctly homeowner would not take the credit, no marketing resources were allocated, and no credit was allocated.
+Count*0
+
+True Positive Revenue - Predicted correctly homeowner would take the credit; allocated the marketing resources, and 25% took the credit.
+Count*(-2850)-[(Count*.25)*-5000]
+
+False Negative Revenue - We predicted that a homeowner would not take the credit but they did. These are likely homeowners who signed up for reasons unrelated to the marketing campaign. Thus, we ‘0 out’ this category, assuming the cost/benefit of this is $0.
+Count*0
+
+False Positive Revenue - Predicted incorrectly homeowner would take the credit; allocated marketing resources; no credit allocated.
+Count*-2850
+
+```{r , echo=FALSE}
+cost_benefit_table <- # Check math
+   testProbs %>%
+      count(predOutcome, Outcome) %>%
+      summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
+                True_Positive = sum(n[predOutcome==1 & Outcome==1]),
+                False_Negative = sum(n[predOutcome==0 & Outcome==1]),
+                False_Positive = sum(n[predOutcome==1 & Outcome==0])) %>%
+       gather(Variable, Count) %>%
+       mutate(Revenue =
+               case_when(Variable == "True_Negative"  ~ Count * 0,  
+                         Variable == "True_Positive"  ~ ((Count * -2850) - ((Count * .25) * -5000)),  
+                         Variable == "False_Negative" ~ Count * 0,
+                         Variable == "False_Positive" ~ (Count * -2850))) %>%
+    bind_cols(data.frame(Description = c(
+              "Predicted correctly homeowner would not take the credit, no marketing resources were allocated, and no
+              credit was allocated.",
+              "Predicted correctly homeowner would take the credit; allocated the marketing resources, and 25% took
+              the credit.", #25% take the 5000
+              "We predicted that a homeowner would not take the credit but they did.",
+              "Predicted incorrectly homeowner would take the credit; allocated marketing resources; no credit
+              allocated.")))
+
+kable(cost_benefit_table,
+       caption = "Figure X: Cost/Benefit Table") %>% kable_styling()
+```
+
+#Optimizing Cost/Benefit Relationship
+```{r , echo=FALSE}
+iterateThresholds <- function(data) {
+  x = .01
+  all_prediction <- data.frame()
+  while (x <= 1) {
+  
+  this_prediction <-
+      testProbs %>%
+      mutate(predOutcome = ifelse(Probs > x, 1, 0)) %>%
+      count(predOutcome, Outcome) %>%
+      summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
+                True_Positive = sum(n[predOutcome==1 & Outcome==1]),
+                False_Negative = sum(n[predOutcome==0 & Outcome==1]),
+                False_Positive = sum(n[predOutcome==1 & Outcome==0])) %>%
+     gather(Variable, Count) %>%
+     mutate(Revenue =
+               ifelse(Variable == "True_Negative", (Count * 0),
+               ifelse(Variable == "True_Positive", ((Count * -2850) - ((Count * .25) * -5000)),
+               ifelse(Variable == "False_Negative", (Count * 0),
+               ifelse(Variable == "False_Positive", (Count * -2850), 0
+                      )
+               )
+               )
+               ),
+            Threshold = x)
+  
+  all_prediction <- rbind(all_prediction, this_prediction)
+  x <- x + .01
+  }
+return(all_prediction)
+}
+```
+
+```{r , echo=FALSE}
+whichThreshold <- iterateThresholds(testProbs)
+
+whichThreshold_revenue <- 
+whichThreshold %>% 
+    group_by(Threshold) %>% 
+    summarize(Revenue = sum(Revenue))
+
+whichThreshold %>%
+  ggplot(.,aes(Threshold, Revenue, colour = Variable)) +
+  geom_point() +
+  scale_colour_manual(values = palette5[c(5, 1:3)]) +    
+  labs(title = "Figure 9: Revenue by confusion matrix type and threshold",
+       y = "Revenue") +
+  plotTheme() +
+  guides(colour=guide_legend(title = "Confusion Matrix")) 
+```
+
+```{r , echo=FALSE}
+whichThreshold_revenue <- 
+  whichThreshold %>% 
+    mutate(TookCredit = ifelse(Variable == "True_Positive", (Count * .25),
+                         ifelse(Variable == "False_Negative", Count, 0))) %>%
+  group_by(Threshold) %>% 
+    summarize(Total_Revenue = sum(Revenue),
+              Total_Count_Of_Credits = sum(TookCredit))
+
+# Revenue 
+grid.arrange(ncol = 1,
+ggplot(whichThreshold_revenue)+ 
+  geom_line(aes(x = Threshold, y = Total_Revenue))+
+  geom_vline(xintercept =  pull(arrange(whichThreshold_revenue, -Total_Revenue)[1,1]))+
+    labs(title = "Figure 10: Total Revenues By Threshold",
+         subtitle = "Vertical Line Denotes Optimal Threshold"),
+# Credits
+ggplot(whichThreshold_revenue)+ 
+  geom_line(aes(x = Threshold, y = Total_Count_Of_Credits))+
+  geom_vline(xintercept =  pull(arrange(whichThreshold_revenue, -Total_Count_Of_Credits)[1,1]))+
+    labs(title = "Figure 11: Total Count of Credits By Threshold",
+         subtitle = "Vertical Line Denotes Optimal Threshold"))
+```
+
+```{r , echo=FALSE}
+optimalthreshold <-
+  whichThreshold_revenue %>%
+  dplyr::select(Threshold, Total_Revenue, Total_Count_Of_Credits)
+
+optimalthreshold_table <-
+  whichThreshold_revenue %>%
+  dplyr::select(Threshold, Total_Revenue, Total_Count_Of_Credits)
+
+optimalthreshold_table <-
+  optimalthreshold %>%
+  filter(row(optimalthreshold) == c(25, 50))
+
+kable(optimalthreshold_table,
+       caption = "Cost/Benefit Table") %>% kable_styling()
+=======
 ---
 title: "Assignment 4"
 author: "Me"
@@ -355,4 +827,5 @@ optimalthreshold_table <-
 
 kable(optimalthreshold_table,
        caption = "Cost/Benefit Table") %>% kable_styling()
+>>>>>>> 683d31020b99ea760cf3fb52a944223d7050ee3f
 ```
