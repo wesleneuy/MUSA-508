@@ -374,23 +374,21 @@ cvFit <- train(y ~ .,
                 method="glm", family="binomial",
                 metric="ROC", trControl = ctrl) 
 
-cvFit
 
-
-  dplyr::select(cvFit$resample, -Resample) %>%
-  gather(metric, value) %>%
-  left_join(gather(cvFit$results[2:4], metric, mean)) %>%
-  ggplot(aes(value)) + 
-  geom_histogram(bins=35, fill = "#113245") +
-  facet_wrap(~metric) +
-  geom_vline(aes(xintercept = mean), colour = "#ed5958", linetype = 3, size = 1) +
-  scale_x_continuous(limits = c(0, 1)) +
-  labs(x="Goodness of Fit", y="Count", title="Figure X: CV Goodness of Fit Metrics",
-       subtitle = "Across-fold mean reprented as dotted lines")+
-    plotTheme2() 
-
-
+ dplyr::select(cvFit$resample, -Resample) %>%
+   gather(metric, value) %>%
+   left_join(gather(cvFit$results[2:4], metric, mean)) %>%
+   ggplot(aes(value)) + 
+   geom_histogram(bins=35, fill = "#113245") +
+   facet_wrap(~metric) +
+   geom_vline(aes(xintercept = mean), colour = "#ed5958", linetype = 3, size = 1) +
+   scale_x_continuous(limits = c(0, 1)) +
+   labs(x="Goodness of Fit", y="Count", title="Figure X: CV Goodness of Fit Metrics",
+        subtitle = "Across-fold mean reprented as dotted lines")+
+   plotTheme2() 
 ```
+
+
 
 #Cross Validation:
 
