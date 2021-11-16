@@ -12,7 +12,7 @@ editor_options:
 
 ## Assignment Intro Summary:
 
-This model was developed to predict crashes in the city of Chicago by evaluating risk factors that might significantly influence the likelihood or unlikelihood of a crash to happen in a certain point in time and space. Crashes are the instances in which a vehicle collides with another object or subject, causing a degree of damage of the two. Crashes are difficult to predict since existing data available for it may not include contextual or spatial characteristics of crashes and it might not include many unreported accidents as well. Probability of crashes, we could generally assume, are positively correlated to how streets and networks organize in a city. Characteristics like this one, often, are not easy to engineer to be able to incorporate them into a predicting ml model successfully. We decided to use numeric and countable risk factors to predict crashes, but this resulted in a less reliable predicting tool in the end. During the process and then in retrospection on the exercise, several questions came to mind:
+This model was developed to predict crashes in the city of Chicago by evaluating risk factors that could significantly influence the likelihood or unlikelihood of a crash to happen in a certain point in time and space. Crashes are the instances in which a vehicle collides with another object or subject, causing a degree of damage of the two. Crashes are difficult to predict since existing data available for it may not include contextual or spatial characteristics of crashes and it might not include many unreported accidents as well. Probability of crashes, we could generally assume, are positively correlated to how streets and networks organize in a city. Characteristics like this one, often, are not easy to engineer to be able to incorporate them into a predicting ml model successfully. We decided to use numeric and countable risk factors to predict crashes, but this resulted in a less reliable predicting tool in the end. During the process and then in retrospection on the exercise, several questions came to mind:
 
 - What spatial correlations could there be between the number of liquor retail and the number of crashes in a certain area?
 
@@ -26,15 +26,12 @@ Another additional dataset that we found after the project, but that would have 
 
 
 ```{r setup, include=FALSE, results=FALSE}
-
 knitr::opts_chunk$set(
 	echo = TRUE,
 	fig.align = "center",
 	message = FALSE,
 	warning = FALSE
 )
-
-update.packages("spatstat")
 
 library(tidyverse)
 library(sf)
@@ -49,9 +46,10 @@ library(gridExtra)
 library(knitr)
 library(kableExtra)
 library(tidycensus)
-
-
 ```
+
+
+### Functions
 
 ```{r functions, echo=TRUE, message=FALSE, warning=FALSE, results=FALSE}
 
@@ -387,7 +385,7 @@ function(dataset, id, dependentVariable, indVariables) {
 ```
 
 
-#Data Downloading
+## Data Downloading
 
 ```{r data, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -424,8 +422,8 @@ grid.arrange(ncol = 2,
 ```
 
 
-# Data Wrangling: Creating the Fishnet
-```{r Fishnet, echo=TRUE, message=FALSE, warning=FALSE}
+## Data Wrangling: Creating the Fishnet
+```{r Wrangling, echo=TRUE, message=FALSE, warning=FALSE}
 ## R Markdown
 
 #-----Fishnet-----
@@ -453,7 +451,10 @@ ggplot(data = crash_net) +
 
 ```
 
-# Wrangling Risk Factors
+
+
+## Wrangling Risk Factors
+
 ```{r Risk Factors, echo=TRUE, message=FALSE, warning=FALSE}
 #-----Risk factors-----
 
@@ -555,7 +556,11 @@ for(i in vars){
 do.call(grid.arrange,c(mapList, ncol=3, top="Risk Factors by Fishnet"))
 
 ```
-#Fishnet
+
+The plots above show risk factors by count spatially distributed. The top three factors show a bit of clustering, while the bottom three show greater dispersion.  
+
+
+## NN Risk Factors
 
 ```{r Fishnet, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -597,8 +602,10 @@ for(i in vars){
 do.call(grid.arrange,c(mapList, ncol = 3, top = "Nearest Neighbor risk Factors by Fishnet"))
 
 ```
+The plots above shows distance(nn) from the traffic crashes to risk factors. From the maps only, we could say that the degree of clustering is way less, but the scale at which we are observing these factors says little about the crashes. An interesting observation is in the speed camera violations and the redlight maps, which we could infer show a spatial pattern of "events" distributed across the entire geography. Contrarily, the potholes map shows that areas with less potholes (look at the count map) theoretically have less crashes, but because is clustered in a very specific zone, distance from potholes may tell us little about future crashes.
 
-#Exploring the Spatial Process: Local Moran's I
+
+## Exploring the Spatial Process: Local Moran's I
 
 ```{r Local Morans, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -652,7 +659,12 @@ do.call(grid.arrange,c(varList, ncol = 4, top = "Local Morans I statistics, Traf
 
 ```
 
-#Correlation 
+
+The multiple plots above show the areas with greater statistical significance and the concentration of crashes. Crashes are concentrated in the downtown area. 
+
+
+## Correlation 
+
 ```{r COrrelation, echo=TRUE, message=FALSE, warning=FALSE}
 
 correlation.long <-
@@ -677,7 +689,11 @@ ggplot(correlation.long, aes(Value, traffic_crash_count)) +
 ```
 
 
-# Distance to Hot Spots 
+These corr plots show that while count has a positive correlation to crashes, distance mostly has a negative correlation. Greater distance to risk factors implies less crashes. Greater count of risk factors implies greater number of crash instances. Higher count of bus stops and liquor retail show greater crash instances as well. If a second model was developed, count of other street amenities and retail could be risk factors to consider as they imply potential congestion points on the ground.  
+
+
+## Distance to Hot Spots 
+
 ```{r Dist NN Hotspots, echo=TRUE, message=FALSE, warning=FALSE}
 
 final_net <- final_net %>% 
@@ -698,17 +714,17 @@ ggplot() +
 ```
 
 
+## Cross Validation
 
-
-#Cross Validation
-```{r CV, echo=TRUE, message=FALSE, warning=FALSE}
-
+```{r CV, echo=TRUE, message=FALSE, warning=FALSE, results=FALSE}
 #Histogram of Dependent Variable
 ggplot(final_net, aes(traffic_crash_count)) + 
   geom_histogram(binwidth = 1) +
   labs(title = "Traffic Crashes Distribution")
+```
 
 
+```{r CV-2, message=FALSE, warning=FALSE, include=FALSE, results=FALSE}
 ## define the variables we want
 reg.vars <- c("potholes.nn", "redlight.nn", "speedcamera.nn","streetLightsOut.nn")
 
@@ -760,7 +776,14 @@ reg.summary <-
       mutate(reg.ss.spatialCV, Error = Prediction - traffic_crash_count,
                             Regression = "Spatial LOGO-CV: Spatial Process")) %>%
     st_sf()
+```
 
+
+## Errors by Neighborhood
+
+Errors calculated by neighborhood to test model performance on different group contexts
+
+```{r CV-3, echo=TRUE, message=FALSE, warning=FALSE, results=FALSE}
 #Calculate errors by NEIGHBORHOOD
 error_by_reg_and_fold <- 
   reg.summary %>%
@@ -773,12 +796,18 @@ error_by_reg_and_fold <-
 error_by_reg_and_fold %>% arrange(desc(MAE))
 
 error_by_reg_and_fold %>% arrange(MAE)
+```
 
+## Plots: Accuracy and Generalizability
+
+Cross validation leaving one neighborhood out per iteration. 
+
+```{r CV-4, echo=TRUE, message=FALSE, warning=FALSE, results=FALSE}
 #plot histogram of OOF (out of fold) errors
 error_by_reg_and_fold %>%
   ggplot(aes(MAE)) + 
     geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
-  scale_x_continuous(breaks = seq(0, 11, by = 1)) + 
+  scale_x_continuous(breaks = seq(0, 25, by = 1)) + 
     labs(title="Distribution of MAE", subtitle = "LOGO-CV",
          x="Mean Absolute Error", y="Count") 
 
@@ -787,13 +816,16 @@ error_by_reg_and_fold %>%
   ggplot(aes(MAE)) + 
     geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
     facet_wrap(~Regression) +  
-    geom_vline(xintercept = 0) + scale_x_continuous(breaks = seq(0, 11, by = 1)) + 
+    geom_vline(xintercept = 0) + scale_x_continuous(breaks = seq(0, 25, by = 1)) + 
     labs(title="Distribution of MAE", subtitle = "k-fold cross validation vs. LOGO-CV",
          x="Mean Absolute Error", y="Count") +
     plotTheme()
 
 ```
 
+The spatial process features show an account of crashes across Chicago at a greater resolution than the features without it. This is an important verification step to improve future predictions beyond Chicago (other cities).
+
+## Regressions Table
 
 ```{r Regressions Table, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -808,7 +840,8 @@ kable() %>%
 ```
 
 
-# Errors by LOGO-CV Regression
+## Errors by LOGO-CV Regression
+
 ```{r Errors LOGO, echo=TRUE, message=FALSE, warning=FALSE}
 
 error_by_reg_and_fold %>%
@@ -822,14 +855,17 @@ error_by_reg_and_fold %>%
 
 ```
 
+Like in the histograms, the plots above show how adding spatial process makes the data less skewed, thus greater for overall accuracy or generalizability. 
 
-#Race context
-```{r by race, echo=TRUE, message=FALSE, warning=FALSE}
 
-# Load census API key
+## Race context
+
+Pulling Census data to check how the model generalizes across neighborhood contexts. The table below shows that the model may be under predicting for non whites and over predicting for whites. In the context of crashes, what could that mean? It's hard to interpret... 
+
+```{r by race, echo=TRUE, message=FALSE, warning=FALSE, results=FALSE}
+
 census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150",install=TRUE, overwrite=TRUE)
 
-#Load list of variables
 acs_variable_list.2018 <- load_variables(2018,"acs5")
 
 tracts18 <- 
@@ -858,9 +894,10 @@ reg.summary %>%
 
 ```  
 
-#Kernel Density & Risk Prediction
 
-```{r by kernel density, echo=TRUE, message=FALSE, warning=FALSE}
+## Kernel Density & Risk Prediction
+
+```{r by kernel density, echo=TRUE, message=FALSE, warning=FALSE, results=FALSE}
 
 traffic_crash19 <- st_read("https://data.cityofchicago.org/api/geospatial/85ca-t3if?method=export&format=GeoJSON") %>% filter(crash_type == "INJURY AND / OR TOW DUE TO CRASH") %>% mutate(year = substr(crash_date,1,4)) %>% filter(year == "2019" & most_severe_injury %in% c('FATAL', 'INCAPACITATING INJURY', 'NONINCAPACITATING INJURY'))%>% st_transform('ESRI:102271') %>% 
     distinct()%>% 
@@ -910,7 +947,7 @@ rbind(crash_KDE_sf, crash_risk_sf) %>%
   gather(Variable, Value, -label, -Risk_Category, -geometry) %>%
   ggplot() +
     geom_sf(aes(fill = Risk_Category), colour = NA) +
-    geom_sf(data = sample_n(traffic_crash19, 3000), size = .5, colour = "black") +
+    geom_sf(data = sample_n(traffic_crash19, 3000), size = .4, colour = "black") +
     facet_wrap(~label, ) +
     scale_fill_viridis(discrete = TRUE) +
     labs(title="Comparison of Kernel Density and Risk Predictions",
@@ -918,6 +955,10 @@ rbind(crash_KDE_sf, crash_risk_sf) %>%
     mapTheme(title_size = 14)
 
 ```
+
+
+The comparison of Kernel Density and Risk Predictions shows that observed crashes in 2019 are not too far apart from the 2018 crashes distribution. Crashes predicted for 2019 may suggest a slight increase in risk percentage by area, but more data would be needed to justify this assumption. Further feature engineering should still be done to improve model predictions.   
+
 
 ```{r by plot, echo=TRUE, message=FALSE, warning=FALSE}
 #Bar plot
@@ -937,9 +978,9 @@ rbind(crash_KDE_sf, crash_risk_sf) %>%
 ```
 
 
-#Conclusion
+## Conclusion
 
-Unfortunately, our model captures risk predictions below the kernel density at the two higher risk categories, making it an unreliable source to predict crashes. 
+Predicting crashes is not the same as predicting crimes. Crashes are influenced by many non-numeric factors and their data repositories may be incomplete.The likelihood of a crash to happen is more random than a crime, thus predicting for it may not show a typical set of results as in other models. Predicting crashes are not necessarily for determining policing funding or reource allocation for example, so when predicting crashes, we may want to have an agenda for it that targets a specific agenda (ie. improvement of roads, speed reduction, street reformatting, sidewalk conditioning, etc.)
 
 
 
