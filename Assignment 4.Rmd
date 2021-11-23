@@ -130,13 +130,13 @@ housing <-
 #Exploratory Analysis
 451 homeowners took the credit; 3668 did not take the credit
 campaign - the more times an individual has been contacted, they are less likely 
-to use the tax credit program. 
+to use the tax credit program
 previous - if individual has been contacted more times before this campaign, they
 are more likely to use the tax program
 inflation - higher inflation rate, less likely to use the tax credit program
 unemployment rate - 
 
-```{r Continuous}
+```{r Continuous, echo=TRUE, message=FALSE, warning=FALSE}
 #Continuous- Numeric
 housing %>%
   dplyr::select(y,age, unemploy_rate,inflation_rate, spent_on_repairs, campaign, previous, cons.price.idx,cons.conf.idx, pdays) %>%
@@ -153,8 +153,9 @@ housing %>%
 
 ```
 
-No mortgage, no tax lien, full time residence not in philly - will accept tax credit
-```{r Yes or No}      
+No mortgage, no tax lien, full time residence in Philly - will accept tax credit
+
+```{r Yes or No, echo=TRUE, message=FALSE, warning=FALSE}
 # Yes/No
 housing %>%
   dplyr::select(y,mortgage, taxbill_in_phl, taxLien) %>%
@@ -171,8 +172,9 @@ housing %>%
   plotTheme()
 ```      
 
-```{r cars} 
-# Categorical
+```{r cars, echo=TRUE, message=FALSE, warning=FALSE, fig.height=8}
+
+#Categorical
 housing %>% 
   dplyr::select(y, job, marital, education, contact, month, day_of_week, poutcome) %>%
   gather(Variable, value, -y) %>%
@@ -184,12 +186,13 @@ housing %>%
     labs(x="Took Credit", y="Count",
          title = "Figure X: Feature associations with the likelihood of taking tax credit",
          subtitle = "Multiple category features") +
-    theme(axis.text.x = element_text(angle=45, hjust=1))+
+    theme(axis.text.x = element_text(angle=45, hjust=1)) +
   plotTheme()
+
 ```
 
 #Building a kitchen sink model
-```{r cars}
+```{r kitchen sick model, echo=TRUE, message=FALSE, warning=FALSE}
 
 set.seed(3456)
 trainIndex <- createDataPartition(y = paste(housing$taxLien), p = .65, list = FALSE, times = 1)
@@ -438,27 +441,39 @@ cost_benefit_table <- # Check math
               allocated.")))
 
 cost_benefit_table %>%
-kable(
-      caption = "Figure X: Cost/Benefit Table") %>%
-  kable_styling() %>%
-  htmltools:: HTML() %>%
-  print
+  kable(caption = "Figure X: Cost/Benefit Table") %>%
+  kable_styling()
 
 
 ```
 
 #Optimizing Cost/Benefit Relationship
 
-```{r , echo=FALSE}
+Ideally, the ‘optimal’ threshold is the one that returns the greatest cost/benefit. In this section, a function is created to iteratively loop through each threshold, calculate confusion metrics, and total the revenue for each. The results are then visualized for each threshold.
 
-whichThreshold <- iterateThresholds(testProbs)
+```{r Threshold, echo=TRUE, message=FALSE, warning=FALSE}
+
+
+whichThreshold <- iterateThresholds(testProbs2)
+
+# WHy does this repeats below?
+# whichThreshold_revenue <- 
+# whichThreshold %>% 
+#     group_by(Threshold) %>% 
+#     summarize(Revenue = sum(Revenue))
 
 whichThreshold_revenue <- 
-whichThreshold %>% 
-    group_by(Threshold) %>% 
-    summarize(Revenue = sum(Revenue))
+  whichThreshold %>%
+    dplyr::select(starts_with("Count"), Threshold) %>%
+    gather(Variable, Count, -Threshold) %>%
+    mutate(Revenue =
+             case_when(Variable == "Count_TN"  ~ Count * 30,
+                       Variable == "Count_TP"  ~ ((30 - 8) * (Count * .50)) +
+                                                 (-32 * (Count * .50)),
+                       Variable == "Count_FN"  ~ (-30) * Count,
+                       Variable == "Count_FP"  ~ (30 - 8) * Count))
 
-whichThreshold %>%
+whichThreshold_revenue %>%
   ggplot(.,aes(Threshold, Revenue, colour = Variable)) +
   geom_point() +
   scale_colour_manual(values = palette5[c(5, 1:3)]) +    
@@ -469,26 +484,46 @@ whichThreshold %>%
 
 ```
 
-```{r , echo=FALSE}
+
+## Plot of Threshold as a Function of Revenue and Count of Credits
+This shows thresholds as function of total revenuw and count of people who took the credit
+
+```{r Small Multiple Plots, echo=TRUE, message=FALSE, warning=FALSE, fig.height=8}
+
 whichThreshold_revenue <- 
-  whichThreshold %>% 
-    mutate(TookCredit = ifelse(Variable == "True_Positive", (Count * .25),
+  whichThreshold_revenue %>% 
+  mutate(TookCredit = ifelse(Variable == "True_Positive", (Count * .25),
                          ifelse(Variable == "False_Negative", Count, 0))) %>%
   group_by(Threshold) %>% 
-    summarize(Total_Revenue = sum(Revenue),
-              Total_Count_Of_Credits = sum(TookCredit))
+  summarize(Total_Revenue = sum(Revenue), Total_Count_Of_Credits = su'm(TookCredit))
 
-# Revenue 
+#Plot
 grid.arrange(ncol = 1,
-ggplot(whichThreshold_revenue)+ 
-  geom_line(aes(x = Threshold, y = Total_Revenue))+
-  geom_vline(xintercept =  pull(arrange(whichThreshold_revenue, -Total_Revenue)[1,1]))+
-    labs(title = "Figure 10: Total Revenues By Threshold",
-         subtitle = "Vertical Line Denotes Optimal Threshold"),
-# Credits
-ggplot(whichThreshold_revenue)+ 
-  geom_line(aes(x = Threshold, y = Total_Count_Of_Credits))+
-  geom_vline(xintercept =  pull(arrange(whichThreshold_revenue, -Total_Count_Of_Credits)[1,1]))+
-    labs(title = "Figure 11: Total Count of Credits By Threshold",
-         subtitle = "Vertical Line Denotes Optimal Threshold"))
+             ggplot(whichThreshold_revenue)+ 
+               geom_line(aes(x = Threshold, y = Total_Revenue))+
+               geom_vline(xintercept =  pull(arrange(whichThreshold_revenue, -Total_Revenue)[1,1]))+
+               labs(title = "Figure 10: Total Revenues By Threshold",
+                    subtitle = "Vertical Line Denotes Optimal Threshold"),
+             ggplot(whichThreshold_revenue) + 
+               geom_line(aes(x = Threshold, y = Total_Count_Of_Credits))+
+               geom_vline(xintercept =  pull(arrange(whichThreshold_revenue, -Total_Count_Of_Credits)[1,1]))+
+               labs(title = "Figure 11: Total Count of Credits By Threshold",
+                    subtitle = "Vertical Line Denotes Optimal Threshold"))
+
+
+
+whichThreshold_revenue %>%
+  dplyr::select(Threshold, Total_Revenue, Total_Count_Of_Credits) %>%
+  gather(Variable, Value, -Threshold) %>%
+  ggplot(aes(Threshold, Value, colour = Variable)) +
+    geom_point() +
+    geom_vline(xintercept = pull(arrange(whichThreshold_revenue, -Revenue)[1,1])) +
+    scale_colour_manual(values = palette2) +
+    plotTheme() + ylim(0,70000) +
+    labs(title = "Revenue this pay period and the next by threshold",
+         subtitle = "Assuming no new customers added next period. Vertical line denotes optimal threshold")
+
+
+
+
 ```
