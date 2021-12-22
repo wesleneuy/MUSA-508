@@ -1,5 +1,5 @@
 ---
-title: "ConNECt - Keeping You on Track"
+title: "MUSA 508 Final Project: ConNECt App"
 author: "Veronica Rosado & Weslene Uy"
 date: "Fall 2021"
 output: html_document
@@ -14,14 +14,37 @@ output: html_document
 editor_options: 
   markdown: 
     wrap: 72 
+  chunk_output_type: inline
 ---
 
-App Name: ConNECt - "Keeping you on track"
-1. Who we are? 
-2. Our approach (maybe some subheaders here)
-   a. [Background - What we know about NJ Transit]
-3. Does it work? 
-4. What's next?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+knitr::include_graphics('~/CPLNPennDesign/590-Musa/Final Project/Wireframe-2-CoNECt-11.jpg')
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+knitr::include_graphics('~/CPLNPennDesign/590-Musa/Final Project/NYT-NJCommute.jpg')
+```
+
+*Image source: The New York Times (2018)*
+
+
+1. Our approach
+   1.1 [Background - What we know about NJ Transit]
+   1.2 The use case
+2. Our Data 
+    2.1 Trains Stations and Delays
+    2.2 Ridership 2018
+    2.3 Weather
+    2.4 Census Tracts (for Mappings)
+3. Our Processing and Data Exploration (Exploratory Analysis)
+3. Our Model (Regressions)
+3. Does it work? (Validation)
+4. What's next for the CoNECt team? (Conclusion)
+
+
+
+
 
 Need to choose palette + fix charts/graphs/maps. 
 a. Motivate the analysis – “What is the use case; why would someone want to replicate your analysis and why would they use this approach?”
@@ -34,7 +57,10 @@ f. Provide additional maps and data visualizations to show that your model is us
 g. Talk about how your analysis meets the use case you set out to address.
 h. What could you do to make the analysis better?
 
-```{r loading packages, include=FALSE}
+
+Loading Packages, Themes and Functions
+```{r loading packages, message=FALSE, warning=FALSE, include=FALSE}
+
 library(tidyverse)
 library(sf)
 library(lubridate)
@@ -155,23 +181,50 @@ mapTheme <- theme(plot.title =element_text(size=12),
 palette7 <- c("#201E5A","#482D81","#5F63AD", "#588FCB", "#60C7E6", "#94D6DC","#FFCCB0")
 palette6 <- c("#CC777A","#B74B8C","#8261A5", "#34559E", "#E8863D", "#F0B284")
 palette2 <- c("#CC777A","#34559E")
+
+
+# Load Quantile break functions
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 4),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+
 ```
 
-# Who we are?
+# 1. Our Approach
+
+**Premise**
 
 NJ Transit is one of the largest state-owned public transportation systems in the US. The Northeast Corridor Line is its busiest, servicing passengers from Trenton to New York's Penn Station. In its [2019 Annual Report](https://data.nj.gov/Transportation/2019-New-Jersey-Transit-Annual-Report/pvhb-pq63), the agency highlighted its focus on improving the customer experience, including the release of key performance metrics to provide more transparency for commuters. 
 
+**Use Case**
+
 An important indicator for rail performance is service reliability, measured by on-time performance statistics. Following commuter rail standard in the Northeast, NJ Transit defines 'on time' as arrival at the final destination within 6 minutes of its scheduled time. In 2019, the recorded on-time performance for the Northeast Corridor Line was 89.5%, putting it in the middle of the list: Main/Bergen and Pascack Valley lines had the best on-time performance at 93.8% while the Atlantic City line had the worst at 85.9%. Still, this was a decrease from its 91.1% on-time performance in 2011. The shared rail space with Amtrak was partly blamed as a cause for [delay](https://www.nj.com/news/2016/08/this_nj_transit_train_line_is_the_worst_at_getting_you_to_work_on_time.html), with Amtrak trains getting priority. Mechanical breakdowns due to years of [underfunding](https://www.nj.com/news/2021/07/breakdowns-now-the-top-cause-for-canceled-nj-transit-trains-neglect-and-underfunding-to-blame.html), heavy rains and severe weather conditions also lead to delays.
 
-At ConNECt, we understand that time is of the essence for commuters traveling the Northeast Corridor. We want to help keep you on track. 
+At ConNECt, we understand that time is of the essence for commuters traveling the Northeast Corridor (NEC). We want to help you be on track of your time and your rides. 
 
-For our Beta release, we are modeling train delays January to February 2019 using this [dataset](https://www.kaggle.com/pranavbadami/nj-transit-amtrak-nec-performance?select=2018_11.csv), which contains trip-level performance data for the rail system.
+**User Interface, App Wireframe**
 
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+knitr::include_graphics('~/CPLNPennDesign/590-Musa/Final Project/Wireframe-2-CoNECt-03.jpg')
+```
 
-```{r station_plot,  message = FALSE, warning = FALSE, fig.width=8, fig.align='center'} 
+# 2. Our Data
+
+## 2.1 NJ Transit Stops
+
+```{r station_plot, fig.align='center', fig.width=8, message=FALSE, warning=FALSE, include=FALSE}
 njTransStops <- st_read("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/Rail_Stations_of_NJ_Transit.geojson", stringsAsFactors=FALSE)
 
-#select NE
+#select NEC stops
 stops <- njTransStops %>%
   filter(LINE_CODE == "NE")%>%
   dplyr::select(STATION_ID, LATITUDE, LONGITUDE)
@@ -190,20 +243,44 @@ ggmap(map) +  geom_point(data=stops, mapping = aes(x=LONGITUDE, y=LATITUDE), col
   mapTheme2()
 
 ```
+## 2.2 NJ Transit + Amtrak (NEC) Rail Performance 2019
 
+For our Beta release, we are modeling train delays with a sample of 3 months of data from January to February 2019 using this [dataset](https://www.kaggle.com/pranavbadami/nj-transit-amtrak-nec-performance?select=2018_11.csv), which contains trip-level performance data for the rail system.
 
 ```{r load data, include=FALSE}
 
 dat19_01 <- read.csv("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/2019_01.csv", stringsAsFactors=FALSE)
 dat19_02 <- read.csv("~/CPLNPennDesign/590-Musa/Musa508-Vero/MUSA-508/2019_02.csv", stringsAsFactors=FALSE)
-#dat19_03 <- read.csv("~/GitHub/MUSA-508/2019_03.csv", stringsAsFactors=FALSE)
 
 #get rid of NAs and focus on the Northeast Corridor
 dat_all <- rbind(dat19_01, dat19_02) %>% 
   na.omit() %>% 
   filter(line == "Northeast Corrdr" )
+
+kable(summary(dat_all)) %>%
+  kable_styling()
 ```
 
+## 2.3 NJ Census Tracts
+
+```{r station_plot,  include=FALSE, message = FALSE, warning = FALSE, fig.width=8, fig.align='center'}
+
+# Install Census API Key
+census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150", overwrite = TRUE)
+
+njCensus <- 
+  get_acs(geography = "county", 
+          variables = c("B01003_001"), 
+          year = 2019, 
+          state = "NJ", 
+          geometry = TRUE, 
+          output = "wide") 
+```
+
+
+## 2.4 Ridership Data 2018
+
+**We found relevant to look at ridership data from 2018.** 
 
 In 2018, [the average weekday passenger boardings](https://www.myleszhang.org/files/2019/03/Weekday-Ridership-Statistics-21z2n4i-1h26kh2.pdf) reached 120,750, with the busiest stations being New York Penn and Newark Penn recording 43,375 and 19,729 respectively.
 
@@ -234,8 +311,68 @@ ridership_2018 <- data.frame(station, boardings) #we are using 2019 data no? Why
 ```
 
 
-```{r data cleaning, include=FALSE}
+## 2.5 Weather Data: External Characteristics that may influence train delays
 
+Weather events could disrupt rail services [Rossetti (2007)](https://rosap.ntl.bts.gov/view/dot/9745), leading to both economic and financial losses for commuters and railway operators. For example, heavy rains could cause flooding and submerge part of the tracks. Extreme temperatures [could jam up railroads](https://www.theatlantic.com/technology/archive/2019/02/chicago-railroads-fire-tracks/581875/). High winds could make railcars prone to rollovers and derailments. We included the following weather data collected by the Newark Liberty International Airport (EWR): precipitation (inches); wind gust and speed (knots); visibility (miles); and temperature (fahrenheit). 
+
+```{r weather, echo=TRUE, message=FALSE, warning=FALSE}
+
+# get weather data
+weather <- riem_measures(station = "EWR", date_start = "2019-01-01", date_end = "2019-02-28") %>% 
+  dplyr::select(valid, sknt, p01i, vsby, gust, tmpf)%>%
+  replace(is.na(.), 0) %>%
+  mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
+  mutate(week = week(interval60),
+         dotw = lubridate::wday(interval60, label=TRUE)) %>%
+  group_by(interval60) %>%
+  summarize(Precipitation = sum(p01i),
+            Wind_Speed = max(sknt),
+            Visibility = max(vsby),
+            Wind_Gust = max(gust),
+            Temperature = max(tmpf))%>%
+mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+```
+
+```{r message=FALSE, warning=FALSE, weather plots warning=FALSE}
+
+grid.arrange(
+  ggplot(weather, aes(interval60, Precipitation)) + geom_line() + 
+    labs(title="Precipitation", x="Hour", y="Precipitation") + plotTheme,
+  ggplot(weather, aes(interval60, Wind_Speed)) + geom_line() + 
+    labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme,
+  ggplot(weather, aes(interval60, Wind_Gust)) + geom_line()+
+    labs(title="Wind Gust", x="Hour", y="Wind Gust") + plotTheme,
+  ggplot(weather, aes(interval60, Visibility)) + geom_line()+
+    labs(title="Visibility", x="Hour", y="Visibility") + plotTheme,
+  ggplot(weather, aes(interval60, Temperature)) + geom_line()+
+    labs(title="Temperature", x="Hour", y="Temperature") + plotTheme)
+```
+
+
+Weather Distribution
+
+```{r weather distribution, warning=FALSE, message=FALSE}
+
+weather %>%
+    dplyr::select(interval60, Precipitation, Wind_Speed, Visibility, Wind_Gust, Temperature) %>%
+    gather(Variable, value, -interval60) %>%
+    ggplot() + 
+    geom_density(aes(value, color=interval60), fill = "transparent") + 
+    facet_wrap(~Variable, scales = "free", ncol=5) +
+    scale_color_manual(values = palette2) +
+    labs(title = "Weather Distributions") +
+  plotTheme2()
+
+```
+
+
+# 3.Our Data Exploration
+
+## 3.1 Ridership by Station
+
+Time hour intervals and Ridership by Station in 2018
+
+```{r data wrangling, message=FALSE, warning=FALSE, include=FALSE}
 # interval 60
 dat_all <- dat_all %>% 
   mutate(scheduled_time = as_datetime(scheduled_time),
@@ -264,21 +401,19 @@ dat_all <- dat_all %>%
          # actual time in decimal format
          act_time = act_hour + act_minute/60) 
 
-
 # create a unique identifier for each row with concatenated date and train_id
 dat_all$unique <- paste(dat_all$date, dat_all$train_id , sep = " ")
 
-#dat <- dat %>% filter(month!="3")
+```
 
-# renaming to unify the station names from different data set
-stops[13,1] <- "Princeton Junction"
-stops[16,1] <- "Secaucus Upper Lvl"
+
+```{r NECStops data wrangling, message=FALSE, warning=FALSE, include=FALSE}
 
 #get unique stops in NEC
-NECstops <- as.data.frame(unique(dat$to))
+NECstops <- as.data.frame(unique(dat_all$to))
 
 #merge to get coordinates
-NECstops <- merge(NECstops, stops, by.x="unique(dat$to)", by.y="STATION_ID")
+NECstops <- merge(NECstops, stops, by.x="unique(dat_all$to)", by.y="STATION_ID")
 
 #change column names
 colnames(NECstops)[1] <- "STATION"
@@ -291,44 +426,27 @@ NECstops.sf <- NECstops %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102711')
 
+#Ridership by Station Plot
+palette16 <- c("#201E5A","#482D81","#5F63AD","#588FCB","#60C7E6", "#94D6DC","#FFCCB0","#CC777A","#B74B8C","#8261A5", "#34559E", "#E8863D", "#F0B284","#ffcdb2","#ffb4a2","#e5989b","#b5838d","#6d6875")
 
-```
-
-```{r station_plot,  include=FALSE, message = FALSE, warning = FALSE, fig.width=8, fig.align='center'}
-
-# Install Census API Key
-census_api_key("7fcf0c60997f4d8ccd298e26df0b2f35dc033150", overwrite = TRUE)
-
-njCensus <- 
-  get_acs(geography = "county", 
-          variables = c("B01003_001"), 
-          year = 2019, 
-          state = "NJ", 
-          geometry = TRUE, 
-          output = "wide") 
-```
-   
-```{r Ridership Plot, echo=TRUE, message=FALSE, warning=FALSE}
-
-#make a plot of ridership per station (check homework 1)
 ggplot() +
-   geom_sf(data=njCensus, fill="grey09") +
-   geom_point(data=NECstops.sf, aes(size=boardings), fill="#CA3697", legend=TRUE) +
-   labs(title="NEC Stations and ridership") +
-   mapTheme2() 
+  geom_sf(data=njCensus, fill="grey90") +
+  geom_sf(data=NECstops.sf, aes(size = boardings, fill = boardings, color = boardings), alpha=0.5, legend=TRUE) +
+  #geom_point(data= NECstops.sf, aes(size= boardings))
+  scale_fill_manual(values = palette16) +
+  labs(title="2018 Ridership by NEC Stations") +
+  mapTheme2() 
 
 ```
+
    
-  
-   
-# Our approach
+## 3.2 Delays
 
 To account for some variations in service, NJ Transit considers vehicles operating within 6 minutes of published schedule as on time. From this definition, 26% of trains were delayed from Jan to Feb 2019. On average, passengers wait for 4.3 minutes before their trains arrive as scheduled. The longest delay during this period was on 31 January 2019, where passengers on Edison and Jersey Avenue stations had to wait for 86 minutes. 
 
 ```{r dist of delay times, warning=FALSE, message=FALSE}
 ggplot(dat_all, aes(x=delay_minutes))+
-            geom_histogram(binwidth = 0.5, fill = "blue", alpha=0.8)+
-            #xlim(0, 30) +
+            geom_histogram(binwidth = 0.5, fill = "#482D81", alpha=0.8)+
             labs(x="Minutes", 
                  y="Frequency",
                    title="Delay Time of Trains Jan-Feb 2019",
@@ -337,12 +455,13 @@ ggplot(dat_all, aes(x=delay_minutes))+
 ```
 
 
-Next, we zoom in on the average delay by the different times of the day, week, and month. Although most delays are under 10 minutes, we see some spikes on certain days.
+Next, we look at average delay by the different times of the day, week, and month. Although most delays are under 10 minutes, we see some spikes on certain days of the week.
 
-```{r cars, warning=FALSE, message=FALSE}
+```{r AvgDelayTime, echo=TRUE, message=FALSE, warning=FALSE}
+
 #overall delay minutes by month
 ggplot(dat_all %>% group_by(interval60) %>% summarize(average_delay = mean(delay_minutes)))+
-  geom_line(aes(x=interval60, y=average_delay))+
+  geom_line(aes(x=interval60, y=average_delay), color= "#4FA8DE")+
   #scale_colour_manual(name="Month", values = palette6) +
   labs(title="Average Delay by Hour from Jan - Feb 2019",
        subtitle="NJT-NEC",
@@ -352,8 +471,9 @@ ggplot(dat_all %>% group_by(interval60) %>% summarize(average_delay = mean(delay
 ```
 
 
-Delays were highest overnight on Tuesdays and Thursdays.
-```{r cars, warning=FALSE, message=FALSE}
+The plot below shows mean delays by day of the week (dotw). Delays were highest overnight on Tuesdays and Thursdays. Train departures between 4am-10am are fairly on time most days of the week. 
+
+```{r DelayDay, echo=TRUE, message=FALSE, warning=FALSE}
 
 #mean delay by day
 dat_all %>%
@@ -372,7 +492,9 @@ dat_all %>%
 ```
 
 
-Morning rush hour is from 7 to 9, while the evening rush hour is from 4 to 7. On average, delays during the AM peak time are longer than the afternoon peak hours.
+To have a better idea of times of the day, our enginneers recategorized daily time into 5 categories:*"AM Peak", "Midday", "PM Peak", "Late Night", "Overnight"*.
+
+Morning rush hour (AM Peak) is from 7 to 9, while the evening rush hour (PM Peak) is from 4 to 7. On average, delays during the AM peak time are longer than the PM peak hours. Overall, night trains have shorter delays than the rest of the day.
 
 ```{r dat1, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -388,8 +510,8 @@ p1 <-  dat1 %>%
   select(tod_1, delay_minutes) %>%
   group_by(tod_1) %>%
   summarise(mean_delay = mean(delay_minutes)) %>%
-  ggplot(aes(x = tod_1, y=mean_delay)) +
-  geom_bar(stat="identity") +
+ ggplot(aes(x = tod_1, y=mean_delay)) +
+  geom_bar(stat="identity", fill="#4FA8DE") +
   labs(x = "",
        y = "Average Delay Minutes",
        title = "Mean Delay Minutes by Different Time",
@@ -408,17 +530,27 @@ p2 <-  dat1 %>%
        fill = "Time") +
     plotTheme2()
 
-ggarrange(p1, p2, widths = c(2,1.5))
+ggarrange(p1, widths = c(2,1.5))
 
 ```
 
+
+**CoNECt** not only measures delay as a temporal feature, but it also considers the spatial aspects of it. Below you'll see an overview of delays by station and delays by train line. 
+
+
+Our team also looked at sum of delay per station. From Jersey Avenue to Secaucus, delays exceed 4 minutes consistently. Regardless, trains seem to arrive within the 3 minute delay to New York Penn Station. 
+
 ```{r stations1, warning=FALSE, message=FALSE}
+
 #overall delay by station
 
 dat1$to <- factor(dat1$to,                                    
-                  levels = c("Trenton","Hamilton","Princeton Junction", "Jersey Avenue", "New Brunswick",
-                             "Edison","Metuchen", "Metropark", "Rahway", "Linden", "Elizabeth", "North 
-                             Elizabeth", "Newark Airport", "Newark Penn Station", "Secaucus Upper Lvl", 
+                  levels = c("Trenton","Hamilton","Princeton Junction", "Jersey Avenue", 
+                             "New Brunswick",
+                             "Edison","Metuchen", "Metropark", "Rahway", "Linden", 
+                             "Elizabeth", "North 
+                             Elizabeth", "Newark Airport", "Newark Penn Station", 
+                             "Secaucus Upper Lvl", 
                              "New York Penn Station"))
 
 dat1 %>% #filter(direction=="Northbound", month==1, day==1, train_id=="3806")%>%
@@ -426,7 +558,7 @@ dat1 %>% #filter(direction=="Northbound", month==1, day==1, train_id=="3806")%>%
   group_by (to) %>%
   summarise(mean_delay = mean(delay_minutes)) %>%
   ggplot(aes(x=factor(to), y=mean_delay)) +
-  geom_bar(stat="identity", fill="#03045e") +
+  geom_bar(stat="identity", fill="#5F63AD", alpha=0.7) +
   labs(x="Station",
        y="Average Delay Minutes",
        title="Average Delay by Station in Minutes",
@@ -442,22 +574,24 @@ Map of average delay by station
 
 stations <- dat_all %>%
   group_by(to) %>%
-  summarize(mean_delay = mean(delay_minutes)) #needs to be an sf
+  summarize(mean_delay = mean(delay_minutes))
 
+stations.sf <- merge(NECstops, stations, by.x="STATION", by.y="to") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326, agr = "constant") %>%
+  st_transform('ESRI:102711')
 
 
 ggplot() +
   geom_sf(data = njCensus, fill="grey90") +
-  geom_sf(data = dat_all, aes(color=mean_delay), size=1, show.legend = "point") +
+  geom_sf(data = stations.dat, aes(color = mean_delay), size=1, show.legend = "point") +
   labs(title= "Delays by station") +
-  scale_color_viridis(direction=-1) +
-  plotTheme2()
+  scale_color_viridis()
+  #plotTheme2()
 
 ```
 
-Delay by Train
 
-```{r Train, message=FALSE, warning=FALSE}
+```{r Trains, message=FALSE, warning=FALSE}
 
 dat_all$train_id <- as.factor(dat_all$train_id)
 
@@ -476,59 +610,11 @@ dat_all %>% filter(direction=="Northbound", month==1, day==1)%>%
   plotTheme2()
 ```
 
-# Weather Data: How good of a predictor can this external characteristic be?
-
-Weather events could disrupt rail services [Rossetti (2007)](https://rosap.ntl.bts.gov/view/dot/9745), leading to both economic and financial losses for commuters and railway operators. For example, heavy rains could cause flooding and submerge part of the tracks. Extreme temperatures [could jam up railroads](https://www.theatlantic.com/technology/archive/2019/02/chicago-railroads-fire-tracks/581875/). High winds could make railcars prone to rollovers and derailments. We included the following weather data collected by the Newark Liberty International Airport (EWR): precipitation (inches); wind gust and speed (knots); visibility (miles); and temperature (fahrenheit). 
-
-```{r weather, echo=TRUE, message=FALSE, warning=FALSE}
-
-# get weather data
-weather <- riem_measures(station = "EWR", date_start = "2019-01-01", date_end = "2019-02-28") %>% 
-  dplyr::select(valid, sknt, p01i, vsby, gust, tmpf)%>%
-  replace(is.na(.), 0) %>%
-  mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
-  mutate(week = week(interval60),
-         dotw = lubridate::wday(interval60, label=TRUE)) %>%
-  group_by(interval60) %>%
-  summarize(Precipitation = sum(p01i),
-            Wind_Speed = max(sknt),
-            Visibility = max(vsby),
-            Wind_Gust = max(gust),
-            Temperature = max(tmpf))%>%
-mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
-```
-
-```{r message=FALSE, warning=FALSE, weather plots warning=FALSE}
-grid.arrange(
-  ggplot(weather, aes(interval60, Precipitation)) + geom_line() + 
-    labs(title="Precipitation", x="Hour", y="Precipitation") + plotTheme,
-  ggplot(weather, aes(interval60, Wind_Speed)) + geom_line() + 
-    labs(title="Wind Speed", x="Hour", y="Wind Speed") + plotTheme,
-  ggplot(weather, aes(interval60, Wind_Gust)) + geom_line()+
-    labs(title="Wind Gust", x="Hour", y="Wind Gust") + plotTheme,
-  ggplot(weather, aes(interval60, Visibility)) + geom_line()+
-    labs(title="Visibility", x="Hour", y="Visibility") + plotTheme,
-  ggplot(weather, aes(interval60, Temperature)) + geom_line()+
-    labs(title="Temperature", x="Hour", y="Temperature") + plotTheme)
-```
 
 
-```{r weather distribution, warning=FALSE, message=FALSE}
-weather %>%
-    dplyr::select(interval60, Precipitation, Wind_Speed, Visibility, Wind_Gust, Temperature) %>%
-    gather(Variable, value, -interval60) %>%
-    ggplot() + 
-    geom_density(aes(value, color=interval60), fill = "transparent") + 
-    facet_wrap(~Variable, scales = "free", ncol=5) +
-    scale_color_manual(values = palette2) +
-    labs(title = "Weather Distributions") +
-  plotTheme2()
-```
+We looked at the correlation between weather features and average delay time. At lower temperatures, the delay times are longer. For other variables, the relationship isn't very clear from the visualizations. 
 
-
-We also looked at the correlation between weather features and average delay time. At lower temperatures, the delay times are longer. For other variables, the relationship isn't very clear from the visualizations. 
-
-```{r corrplots, message=FALSE, warning=FALSE}
+```{r Weather-Delay, message=FALSE, warning=FALSE}
 
 #adding the weather features to the data
 dat_all <- merge(dat_all, weather)
@@ -588,8 +674,7 @@ grid.arrange(p3, p4, p5, p6, p7, top = "Corr Plots")
 
 ```
 
-
-# Feature Engineering
+## 3.3 Feature Engineering
 
 Making new categories for weather 
 Temperature below or above 32F
@@ -598,11 +683,9 @@ Visibility below or above 3 miles
 Wind speed below or above 21 knots
 Wind gust below or above 30 knots
 
---->for this part, I'm looking at the eNJine group's code. i think their code is more complicated than it needs to be especially when they create lag features and merge them with the dataset
-
 ```{r FE-1, echo=TRUE, message=FALSE, warning=FALSE}
 
-#study panel
+#Study panel
 train.template <- dat_all%>%
   mutate(train_counter=1)%>%
   group_by(interval60, from) %>%
@@ -613,14 +696,13 @@ study.panel <-
   expand.grid(interval60 = unique(train.template$interval60), 
               from = unique(train.template$from))
 
-# TrainPanel
+#Train Panel
 train.panel <- train.template %>%
   right_join(study.panel)
 
 #joining with weather 
 train.weather.panel <- merge(x=train.panel, y= weather, by= 'interval60', all.x= T)
 
-#train.weather.panel[c("late","train_count")][is.na(train.weather.panel[c("late","train_count")])] <- 0 
 
 # Building Time Lags 
 train.weather.panel <- train.weather.panel %>%
@@ -637,16 +719,17 @@ train.weather.panel <- train.weather.panel %>%
          lag4Hours = dplyr::lag(mean_delay,4),
          lag12Hours = dplyr::lag(mean_delay,12),
          lag1day = dplyr::lag(mean_delay,24),
-         lag1week = dplyr::lag(mean_delay, 168))
+         lag1week = dplyr::lag(mean_delay, 168)) %>%
+  mutate_all(~replace(., is.na(.), 0))
 
-train.weather.panel[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")][is.na(stoplag[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")])] <- 0
+# train.weather.panel[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")][is.na(stoplag[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")])] <- 0
 
 ```
 
 
 ```{r FE-2, echo=TRUE, message=FALSE, warning=FALSE}
-
-stoplag<- dat_all %>%
+#Lag by Station
+stoplag <- dat_all %>%
   group_by(train_id) %>% arrange(stop_sequence) %>%
   mutate(onestoplag = dplyr::lag(delay_minutes),
          twostoplag = dplyr::lag(delay_minutes,2)) %>%
@@ -661,49 +744,111 @@ stoplag[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")][i
 
 train.weather.panel.lags.final <- left_join(train.weather.panel, stoplag, by=c( "interval60"))
 
-
-
-# Final Setup 
+# Final Panel Setup 
 panelnoGEOM <- train.weather.panel.lags.final %>% 
-  mutate(y6_numeric = ifelse(mean_delay < minutes(6), 0, 1),
-         y6 = ifelse(mean_delay < minutes(6), "no", "yes"))
+  mutate(Delay4_numeric = ifelse(mean_delay <= minutes(4), 0, 1),
+         Delay4 = ifelse(mean_delay <= minutes(4), "no", "yes"))
          # hour= hour(intervalhour),
          # daynumeric= wday(intervalhour),
          # week = week(intervalhour),
          # weekday = weekdays(intervalhour),
          # week_numeric = as.numeric(week))
 
+summary(panelnoGEOM$Delay4_numeric)
+
 panelnoGEOM <- panelnoGEOM %>%
   mutate(STATION_ID = from) 
 
-panelGEOM <- left_join(panelnoGEOM, NECstops) %>%
-  st_as_sf(crs =3424, agr = "constant")
+
+panelGEOM <- merge(panelnoGEOM, NECstops, by.x="STATION_ID", by.y="STATION") %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = 4326, agr = "constant") %>%
+  st_transform('ESRI:102711')
 
 
-panelnoGEOM[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron", "y6_numeric")][is.na(panelnoGEOM[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron","y6_numeric")])] <- 0
-
-
-set.seed(2121)
-panelnoGEOMTrain <- filter(panelnoGEOM, week < 9) #### BRI, YOU MUST CHANGE THIS BACK TO A 9 
-panelnoGEOMTest <- filter(panelnoGEOM, week >= 9)
-
+kable(summary(panelnoGEOM)) %>%
+  kable_styling()
 
 ```
+
+```{r CorrMatrix Plot}
+
+#Option 1
+numericVars <- panelnoGEOM %>% dplyr::select(is.numeric) %>%
+
+#Option 2
+corrplot_num <- panelnoGEOM %>% 
+  select(lag2Hours, Precipitation, Visibility, Delay4_numeric) %>% na.omit(na.action = "omit")
+
+# Error in cor(corrplot_num) : 'x' must be numeric
+corrplot <- ggcorrplot( 
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c("#260a03", "white", "#a81010"),
+  type="lower",
+  insig = "blank",
+  lab = TRUE) +  
+    labs(title = "Correlation Across Numeric Variables",
+         caption = "Fig.3")+ plotTheme2()
+
+
+table(panelnoGEOM$Delay4_numeric)
+
+```
+
+
+```{r FE-3, echo=TRUE, message=FALSE, warning=FALSE}
+
+set.seed(2121)
+
+panelnoGEOMTrain <- filter(panelnoGEOM, week < 6) 
+
+panelnoGEOMTest <- filter(panelnoGEOM, week >= 9)
+
+```
+
+```{r Train vs Test Plot}
+
+rbind(mutate(panelnoGEOMTrain, Legend = "Training"), 
+      mutate(panelnoGEOMTest, Legend = "Testing")) %>%
+    group_by(Legend, Interval60) %>% 
+      summarise(mean_delay_minutes = mean(delay_minutes)) %>%
+      ungroup() %>% 
+      ggplot(aes(schedule60, mean_delay_minutes, colour = Legend)) + geom_line() +
+        scale_colour_manual(values = palette2) +
+        geom_vline(data = mondays, aes(xintercept = monday)) +
+        labs(title="NJ Transit Rail Trips by Week",
+             subtitle="January-February 2021",
+             x="Day", y="Mean Delay Minutes",
+             caption = "Figure 4.1") +
+        plotTheme() + 
+        theme(panel.grid.major = element_blank())  
+```
+
 
 
 # The Model
 ```{r reg models, warning=FALSE, results= "asis"}
 
-reg1 <- lm(mean_delay ~ Temperature + Precipitation,  data=panelnoGEOM)
+Model1 <- lm(mean_delay ~ Temperature + Precipitation + lag2Hours + lag3Hours + lag4Hours + lag12Hours + lag1day + lag1week + onestoplag + onestopearlieron + twostoplag + Delay4_numeric,  data=panelnoGEOM)
 
-stargazer(reg1, type="html", title="Regression Results", font.size = "small", single.row = TRUE)
+stargazer(Model1, type="text", title="Regression Results", font.size = "small", single.row = TRUE)
 
-summary(reg1)
+
+Model2 <- lm(mean_delay ~ Temperature + Precipitation + lag2Hours + lag3Hours + lag4Hours + lag12Hours + lag1day + lag1week + onestoplag + onestopearlieron + twostoplag,  data=panelnoGEOM)
+
+stargazer(Model2, type="text", title="Regression Results", font.size = "small", single.row = TRUE)
+
+
+#Giving 0 because Delay4_numeric has all 0. Look at line 794
+Model3 <- glm(Delay4_numeric ~ Temperature + Precipitation + lag2Hours + lag3Hours + lag4Hours + lag12Hours + lag1day + lag1week + onestoplag + onestopearlieron + twostoplag,  data=panelnoGEOM)
+
+stargazer(Model3, type="text", title="Regression Results", font.size = "small", single.row = TRUE)
+
+
 ```
 
 
-# Does it work?
----> Just copy pasted the codes from my bikeshare assignment
+# Does it work? Model Evaluation 
 
 Graph for predicted vs observed time series
 ```{r }
