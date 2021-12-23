@@ -38,11 +38,9 @@ knitr::include_graphics('~/CPLNPennDesign/590-Musa/Final Project/NYT-NJCommute.j
     2.3 Weather
     2.4 Census Tracts (for Mappings)
 3. Our Processing and Data Exploration (Exploratory Analysis)
-3. Our Model (Regressions)
+3. Our Model (Regressions) 
 3. Does it work? (Validation)
 4. What's next for the CoNECt team? (Conclusion)
-
-
 
 
 
@@ -466,7 +464,7 @@ ggplot(dat_all %>% group_by(interval60) %>% summarize(average_delay = mean(delay
   labs(title="Average Delay by Hour from Jan - Feb 2019",
        subtitle="NJT-NEC",
        x="Time",
-       y="Average Delay Minutes")+
+       y="Average Delay Minutes") +
   plotTheme2()
 ```
 
@@ -705,6 +703,9 @@ train.weather.panel <- merge(x=train.panel, y= weather, by= 'interval60', all.x=
 
 
 # Building Time Lags 
+
+table(train.weather.panel.lags.final$mean_delay)
+
 train.weather.panel <- train.weather.panel %>%
   group_by(interval60) %>% #na.omit() %>%
   summarise(mean_delay = mean_delay,
@@ -718,7 +719,7 @@ train.weather.panel <- train.weather.panel %>%
          lag3Hours = dplyr::lag(mean_delay,3),
          lag4Hours = dplyr::lag(mean_delay,4),
          lag12Hours = dplyr::lag(mean_delay,12),
-         lag1day = dplyr::lag(mean_delay,24),
+         lag1day = dplyr::lag(mean_delay, 24),
          lag1week = dplyr::lag(mean_delay, 168)) %>%
   mutate_all(~replace(., is.na(.), 0))
 
@@ -727,7 +728,7 @@ train.weather.panel <- train.weather.panel %>%
 ```
 
 
-```{r FE-2, echo=TRUE, message=FALSE, warning=FALSE}
+```{r FE-2.1, echo=TRUE, message=FALSE, warning=FALSE}
 #Lag by Station
 stoplag <- dat_all %>%
   group_by(train_id) %>% arrange(stop_sequence) %>%
@@ -743,14 +744,17 @@ stoplag <- dat_all %>%
 stoplag[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")][is.na(stoplag[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")])] <- 0
 
 train.weather.panel.lags.final <- left_join(train.weather.panel, stoplag, by=c( "interval60"))
+```
 
+
+```{r FE-2.2, echo=TRUE, message=FALSE, warning=FALSE}
 # Final Panel Setup 
 panelnoGEOM <- train.weather.panel.lags.final %>% 
   mutate(Delay4_numeric = ifelse(mean_delay <= minutes(4), 0, 1),
-         Delay4 = ifelse(mean_delay <= minutes(4), "no", "yes"))
-         # hour= hour(intervalhour),
-         # daynumeric= wday(intervalhour),
-         # week = week(intervalhour),
+         Delay4 = ifelse(mean_delay <= minutes(4), "no", "yes"),
+         hour= hour(interval60),
+         daynumeric= wday(interval60),
+         week = week(interval60))
          # weekday = weekdays(intervalhour),
          # week_numeric = as.numeric(week))
 
@@ -773,11 +777,11 @@ kable(summary(panelnoGEOM)) %>%
 ```{r CorrMatrix Plot}
 
 #Option 1
-numericVars <- panelnoGEOM %>% dplyr::select(is.numeric) %>%
+numericVars <- train.weather.panel.lags.final %>% dplyr::select(is.numeric) %>% na.omit(na.action = "omit")
 
 #Option 2
 corrplot_num <- panelnoGEOM %>% 
-  select(lag2Hours, Precipitation, Visibility, Delay4_numeric) %>% na.omit(na.action = "omit")
+  select(mean_delay, lag2Hours, Precipitation, Visibility) %>% na.omit(na.action = "omit")
 
 # Error in cor(corrplot_num) : 'x' must be numeric
 corrplot <- ggcorrplot( 
@@ -800,9 +804,9 @@ table(panelnoGEOM$Delay4_numeric)
 
 set.seed(2121)
 
-panelnoGEOMTrain <- filter(panelnoGEOM, week < 6) 
+panelnoGEOMTrain <- filter(panelnoGEOM, week < 5) 
 
-panelnoGEOMTest <- filter(panelnoGEOM, week >= 9)
+panelnoGEOMTest <- filter(panelnoGEOM, week >= 5)
 
 ```
 
@@ -810,10 +814,11 @@ panelnoGEOMTest <- filter(panelnoGEOM, week >= 9)
 
 rbind(mutate(panelnoGEOMTrain, Legend = "Training"), 
       mutate(panelnoGEOMTest, Legend = "Testing")) %>%
-    group_by(Legend, Interval60) %>% 
-      summarise(mean_delay_minutes = mean(delay_minutes)) %>%
+    group_by(Legend, interval60) %>% 
+      summarise(mean_delay_minutes = mean(mean_delay)) %>%
       ungroup() %>% 
-      ggplot(aes(schedule60, mean_delay_minutes, colour = Legend)) + geom_line() +
+      ggplot(aes(interval60, mean_delay_minutes, colour = Legend)) + 
+      geom_line() +
         scale_colour_manual(values = palette2) +
         geom_vline(data = mondays, aes(xintercept = monday)) +
         labs(title="NJ Transit Rail Trips by Week",
@@ -829,29 +834,59 @@ rbind(mutate(panelnoGEOMTrain, Legend = "Training"),
 # The Model
 ```{r reg models, warning=FALSE, results= "asis"}
 
-Model1 <- lm(mean_delay ~ Temperature + Precipitation + lag2Hours + lag3Hours + lag4Hours + lag12Hours + lag1day + lag1week + onestoplag + onestopearlieron + twostoplag + Delay4_numeric,  data=panelnoGEOM)
+Model1 <- lm(mean_delay ~ lag2Hours + lag3Hours + lag4Hours + lag12Hours + onestoplag + twostoplag, data=panelnoGEOMTrain)
+
+summary(Model1)
+
+Model2 <- lm(mean_delay ~ Temperature + Precipitation + Wind_Gust + Visibility + lag2Hours + lag3Hours + lag4Hours + lag12Hours + onestoplag + twostoplag, data=panelnoGEOMTrain)
+
+summary(Model2)
+
+#Best Model
+Model3 <- lm(mean_delay ~ total_departures + Temperature + Precipitation + Wind_Gust + Wind_Speed + Visibility + lag2Hours + lag3Hours + lag4Hours + lag12Hours + onestoplag + twostoplag,  data=panelnoGEOMTrain)
+
+summary(Model3)
+
 
 stargazer(Model1, type="text", title="Regression Results", font.size = "small", single.row = TRUE)
 
-
-Model2 <- lm(mean_delay ~ Temperature + Precipitation + lag2Hours + lag3Hours + lag4Hours + lag12Hours + lag1day + lag1week + onestoplag + onestopearlieron + twostoplag,  data=panelnoGEOM)
-
 stargazer(Model2, type="text", title="Regression Results", font.size = "small", single.row = TRUE)
 
-
-#Giving 0 because Delay4_numeric has all 0. Look at line 794
-Model3 <- glm(Delay4_numeric ~ Temperature + Precipitation + lag2Hours + lag3Hours + lag4Hours + lag12Hours + lag1day + lag1week + onestoplag + onestopearlieron + twostoplag,  data=panelnoGEOM)
-
 stargazer(Model3, type="text", title="Regression Results", font.size = "small", single.row = TRUE)
-
 
 ```
 
 
-# Does it work? Model Evaluation 
+# Does it work? 
 
-Graph for predicted vs observed time series
+After testing multiple models, we landed into one model that gave us an r-square of 16%. The following time series help to confirm one more time the model's performances, as well as the predicted versus observed values.  
+
+
 ```{r }
+
+# predict function
+model_pred <- function(dat, fit)
+  {
+   pred <- predict(fit, newdata = dat)}
+
+
+panelnoGEOMTest.weekNest <- as.data.frame(panelnoGEOMTest) %>%
+  tidyr::nest()
+  #nest(-week) 
+
+#predictions
+week_predictions <- 
+  panelnoGEOMTest.weekNest %>% 
+    mutate(ATimeLag_FE = map(.x = data, fit = Model1, .f = model_pred),
+           BTimeLag_Space_FE = map(.x = data, fit = Model2, .f = model_pred),
+           CTimeLag_SpaceLag_FE = map(.x = data, fit = Model3, .f = model_pred)) %>% 
+    gather(Regression, Prediction, -data, -week) %>%
+    mutate(Observed = map(data, pull, delay_minutes),
+           Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
+           MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
+           sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE))
+
+
 week_predictions %>% 
   mutate(interval60 = map(data, pull, interval60),
          from_station_id = map(data, pull, start_station)) %>%
@@ -934,5 +969,6 @@ Cross Validation
 ```
 
 # What's next?
+
 As a beta tester, you are an important part of our app's development. Your participation and feedback will help us refine our model and make more accurate predictions.
 
