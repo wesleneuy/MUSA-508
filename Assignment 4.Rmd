@@ -1,7 +1,7 @@
 ---
 title: "Assignment 4"
 author: "Veronica Rosado"
-date: "11/14/2021"
+date: "11/28/2021"
 output:
   html_document:
     toc: true
@@ -30,6 +30,10 @@ library(pROC)
 library(lubridate)
 library(gridExtra)
 library(htmltools)
+library(ggpubr)
+library(ggplot2)
+library(stargazer)
+
 
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
@@ -136,7 +140,8 @@ housing <-
   na.omit()
 ```
 
-#Exploratory Analysis
+
+# Exploratory Analysis
 
 Based on HCD's records from previous campaigns, only 451 (11%) homeowners took the credit. These records also include various information on homeowners which we will use to develop a model predicting the homeowner's likelihood of accepting the credit. The variables are divided into three groups - continuous outcomes, binary variables (Yes / No), and multi-category features. 
 
@@ -161,6 +166,7 @@ housing %>%
 
 ```
 
+
 We also created a distribution plot for these continuous variables. Figure 2 shows that there are variations in credit uptake within certain features. For example, fewer homeowners under 50 years old are taking the credit. At lower inflation rates, more homeowners take the credit, but at higher inflation rates, less homeowners do so.
 
 ```{r Uptake vs No Uptake}
@@ -176,6 +182,7 @@ housing %>%
          subtitle = "Numeric features") +
   plotTheme()
 ```
+
 
 In Figure 3, those who carry a `mortgage`, have `taxLien` against the owner's property, and have a full time residence in Philadelphia `taxbill_in_ph` are more likely to accept tax credit.
 
@@ -221,12 +228,12 @@ housing %>%
 
 ```
 
+
 # Logistic Regression
 
-## Building a kitchen sink model
+## Kitchen sink model
 
 In the kitchen sink model, we included most of the features in HCD's records, except for those that did not have substantially different yes and no outcomes. We also split our data into a 65-35 to test the model. The regression results show that only some of the variables are significant. 
-
 
 ```{r kitchen sink model, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -240,24 +247,23 @@ kitchensink <- glm(y_numeric ~ .,
                    data=housingTrain %>% 
                    dplyr::select(-cons.price.idx, -cons.conf.idx, -y, -spent_on_repairs, -previous, -education), family="binomial" (link="logit"))
 
-summary(kitchensink)
 
-pR2(kitchensink) %>%
-  kable(Caption = "Psuedo R Squared") %>%
-  kable_styling() #McFadden is 0.23
+stargazer(kitchensink, type = "text", 
+          title="Regression Results - Kitchen Sink Model")
+
+#McFadden is 0.23
 
 ```
 
 
 # Distribution of predicted probabilities
 
-Figure 5 below shows the distribution of the predicted probabilities for yes and no outcomes. We see that the 'hump' of predicted probabilities of not taking the credit clusters around 0. For those taking credit, the 'hump'should be closer to 1. This indicates that our kitchen sink model has better predictive power for negative results, but not for positive results.
+The plot below shows the distribution of the predicted probabilities for yes and no outcomes. We see that the 'hump' of predicted probabilities of not taking the credit clusters around 0. For those taking credit, the 'hump'should be closer to 1. This indicates that our kitchen sink model has better predictive power for negative results, but not for positive results.
 
 ```{r , echo=FALSE}
 
 testProbs = data.frame(observed = as.factor(housingTest$y_numeric),
                        probs = predict(kitchensink, housingTest, type = 'response'))
-
 
 ggplot(testProbs, aes(x = probs, fill = as.factor(observed))) +
   geom_density() +
@@ -271,13 +277,17 @@ ggplot(testProbs, aes(x = probs, fill = as.factor(observed))) +
   ylim(0, 23) +
   plotTheme2()
 
+
 ```
 
-# Feature Engineering
 
-To improve our model, we feature recategorized some of the variables based on their distributions. 
+# The Final Model: An Improved one
 
-```{r Feature Eng}
+## Feature Engineering
+
+To improve our model, we recategorized some of the variables based on their distribution on the previous model
+
+```{r Feature Eng, echo=TRUE, message=FALSE, warning=FALSE}
 
 # Age Groups         
 housing <-
@@ -343,13 +353,12 @@ housing <-
 
 ```
 
-# Final Logit Model: The Improved one
 
-Variables that are not significant will not be included in the final model, some variables will also be .
+Variables that were not found significant were dropped. This is then compared to the kitchen sink model which trains including all variables.
 
-```{r Logit Model}
-
+```{r Logit Model, echo=FALSE, message=FALSE, warning=FALSE}
 set.seed(3456)
+
 trainIndex2 <- createDataPartition(y = paste(housing$taxLien), p = .65, list = FALSE, times = 1)
 
 housingTrain2 <- housing[ trainIndex2,]
@@ -362,22 +371,23 @@ reg1 <- glm(y_numeric ~ .,
             family="binomial" (link="logit"))
 
 
-summary(reg1)
-
-pR2(reg1) %>%
-  kable() %>%
-  kable_styling()  #McFadden 0.229
+stargazer(reg1, type = "text", 
+          title="Regression Results - Final Model")
 
 ```
 
+
+According to general rules of thumb for McFadden R2 interpretations, a value of 0.20+ indicates that the model is well fit. Here we can see that our model scored at 0.23, meaning that it is a reliable fit for us to derive conclusions from. Now, this alone does not describe the range of probabilities for churn or no churn. For that, the next section runs a test on the probabilities' distribution. 
+
+
 # Distribution of predicted probabilities
 
-The plot below shows the distribution of predicted probabilities for churn(1) and no churn(0). The model is predicting that more people may not take the credit than the people that would. 
+The plot below shows the distribution of predicted probabilities for churn(1) and no churn(0). The model is predicting that more people may NOT take the credit than the people that would.
 
-```{r Pred Probs, echo=FALSE}
+```{r PredProbs 2, echo=TRUE, message=FALSE, warning=FALSE}
 
 testProbs2 = data.frame(observed = as.factor(housingTest2$y_numeric),
-                       probs = predict(reg1, housingTest2, type = 'response'))
+                       probs = predict(kitchensink, housingTest2, type = 'response'))
 
 ggplot(testProbs2, aes(x = probs, fill = as.factor(observed))) +
   geom_density() +
@@ -386,28 +396,25 @@ ggplot(testProbs2, aes(x = probs, fill = as.factor(observed))) +
                     labels = c('No', 'Yes')) +
   labs(x = 'Predicted probability of taking credit', 
        y = 'Density of probability',
-       title = 'Distribution of predicted probabilities by observed outcome') +
+       title = 'Distribution of predicted probabilities by observed outcome, Test Set 2') +
   xlim(0, 1) +
   ylim(0, 23) +
   plotTheme2()
 
 ```
 
+# Model Evaluation
 
 ## ROC curve
 
-The ROC curve allows us to split the predicted outcomes in various thresholds to better understand the performance of the model in predicting either churn or no churn better. In here, we use a confucsion matrix that helps identify the question.  
+The ROC curve allows us to split the predicted outcomes in various thresholds to better understand the performance of the model in predicting either churn or no churn better. In here, we use a confusion matrix that helps identify the question.  
 
 Confusion Matrix Summary:
-Prediction    0    1
-         0 1271  112
-         1   28   30
-         
-Results show that there were:
-30 true positives, correctly predicted to take the credit
-112 false positives, incorrectly predicted to take the credit (potential loss of marketing $)
-1271 true negatives, correctly predicted to NOT take the credit
-28 false negatives, incorrectly predicted to NOT take the credit (people that took it in the end)
+
+Prediction show that there were:
+
+**30** true positives, correctly predicted to take the credit; **112** false positives, incorrectly predicted to take the credit (potential loss of marketing $); **1271** true negatives, correctly predicted to NOT take the credit; and **28** false negatives, incorrectly predicted to NOT take the credit (people that took it in the end)
+
 
 Accuracy, Specificity and Sensitivity:
 
@@ -416,7 +423,7 @@ Sensitivity : 0.21127
 Specificity : 0.97844
 
 
-```{r ROC Crv, echo=FALSE}
+```{r ROC Crv, echo=TRUE, message=FALSE, warning=FALSE}
 
 testProbs2 <- 
   testProbs2 %>%
@@ -429,16 +436,42 @@ ggplot(testProbs2, aes(d = as.numeric(testProbs2$observed), m = probs)) +
   geom_roc(n.cuts = 50, labels = FALSE, colour = "#ed5958") +
   style_roc(theme = theme_grey) +
   geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
-  labs(title = "ROC Curve - churn model") +
+  labs(title = "ROC Curve - Churn Model") +
   plotTheme2()
 
-#pROC::auc(testProbs2$observed, testProbs2$probs)
+pROC::auc(testProbs2$observed, testProbs2$probs)
 
 ```
 
-#Cross Validation
+The ROC curve shows the trade-off between sensitivity and specificity. At 0.75, the area under the curve of the new model is slightly lower compared to the kitchen sink model. See below...
 
-The Cross validation part helps to  measure generalizability to new data. It splits the data into to sets and runs 100 k-folds over the data, outcoming predicted probabilities (classProbs). 
+
+Kitchen Sink vs Final Model ROC Plots
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+a1 <- ggplot(testProbs, aes(d = as.numeric(testProbs$observed), m = probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#ed5958") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - Kitchen Sink") +
+  plotTheme()
+
+a2 <- ggplot(testProbs2, aes(d = as.numeric(testProbs2$observed), m = probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#ed5958") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - Final Model") +
+  plotTheme()
+
+ggarrange(a1, a2)
+
+```
+
+
+## Cross Validation
+
+The Cross validation part helps to measure generalizability to new data. It splits the data into to sets and runs 100 k-folds over the data, outcoming predicted probabilities (classProbs). 
 
 ```{r Cross V, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -461,27 +494,25 @@ dplyr::select(cvFit$resample, -Resample) %>%
    facet_wrap(~metric) +
    geom_vline(aes(xintercept = mean), colour = "#ed5958", linetype = 3, size = 1) +
    scale_x_continuous(limits = c(0, 1)) +
-   labs(x="Goodness of Fit", y="Count", title="Figure X: CV Goodness of Fit Metrics",
+   labs(x="Goodness of Fit", y="Count", title="CV Goodness of Fit Metrics",
         subtitle = "Across-fold mean reprented as dotted lines")+
    plotTheme2()
 
 ```
 
 
-# Comparing Improved and Baseline Models
+## Comparing Improved and Baseline Models
 
 Compared to the kitchen sink model, the featured engineered model improved accuracy, sensitivity and specificity by a little. While this may not be substantial for this case study, for others it could be. 
 
-## Confusion Matrix for Kitchen Sink (Base)
+## Confusion Matrix for Kitchen Sink (Baseline)
 
-Prediction    0    1
-         0 1268  109
-         1   31   33
+Predictions:
 
-33 true positives
-109 false positives
-1268 true negatives
-31 false negatives
+• 33 true positives
+• 109 false positives
+• 1268 true negatives
+• 31 false negatives
 
 The baseline model points a higher prediction for true positives, but a lower number of instances for the group that has been incorrectly predicted to take the credit (false positives). 
 
@@ -544,22 +575,29 @@ dplyr::select(cvFit_Ks$resample, -Resample) %>%
 
 ## Cost Benefit Analysis
 
-Assumptions:
-$2,850 HCD allocation per homeowner
-25% of contacted eligible homeowners take the credit
-$5000 credit cost per homeowner
-Houses that transacted after taking the credit sold with $10,000 premium
+We developed a cost-benefit analysis that would help the Department of Housing and Community Development allocate its resources more efficiently. The following assumptions were made about the marketing campaign:
 
-True Negative Revenue - Predicted correctly homeowner would not take the credit, no marketing resources were allocated, and no credit was allocated.
+• $2,850 HCD allocation per homeowner
+
+• 25% of contacted eligible homeowners take the credit
+
+• $5000 credit cost per homeowner
+
+• Houses that transacted after taking the credit sold with $10,000 premium
+
+
+Thresholds for cross benefit calculations are described below:
+
+**True Negative Revenue** - Predicted correctly homeowner would not take the credit, no marketing resources were allocated, and no credit was allocated.
 Count*0
 
-True Positive Revenue - Predicted correctly homeowner would take the credit; allocated the marketing resources, and 25% took the credit.
+**True Positive Revenue** - Predicted correctly homeowner would take the credit; allocated the marketing resources, and 25% took the credit.
 Count*(-2850)-[(Count*.25)*-5000]
 
-False Negative Revenue - We predicted that a homeowner would not take the credit but they did. These are likely homeowners who signed up for reasons unrelated to the marketing campaign. Thus, we ‘0 out’ this category, assuming the cost/benefit of this is $0.
+**False Negative Revenue** - We predicted that a homeowner would not take the credit but they did. These are likely homeowners who signed up for reasons unrelated to the marketing campaign. Thus, we ‘0 out’ this category, assuming the cost/benefit of this is $0.
 Count*0
 
-False Positive Revenue - Predicted incorrectly homeowner would take the credit; allocated marketing resources; no credit allocated.
+**False Positive Revenue** - Predicted incorrectly homeowner would take the credit; allocated marketing resources; no credit allocated.
 Count*-2850
 
 ```{r Cost Benfit, message=FALSE, warning=FALSE, , echo=FALSE}
@@ -601,7 +639,7 @@ caret::confusionMatrix(testProbs2$predOutcome, testProbs$observed,
 
 # Optimizing Cost/Benefit Relationship
 
-Ideally, the ‘optimal’ threshold is the one that returns the greatest cost/benefit. In this section, a function is created to iteratively loop through each threshold, calculate confusion metrics, and total the revenue for each. The results are then visualized for each threshold.
+Ideally, the ‘optimal’ threshold is the one that returns the greatest cost/benefit. In this section, a function is created to iteratively loop through each threshold, calculate confusion metrics, and total the revenue for each. The results are then visualized for each scenario. At a lower threshold, we see the costs associated with the false positives, which eventually flattens the ~0.65 mark.
 
 ```{r Threshold, echo=TRUE, message=FALSE, warning=FALSE}
 
@@ -633,21 +671,27 @@ return(all_prediction)
 
 whichThreshold <- iterateThresholds.1(testProbs2)
 
+whichThreshold_revenue <- 
+whichThreshold %>% 
+    group_by(Threshold) %>% 
+    summarize(Revenue = sum(Revenue))
+
 whichThreshold %>%
   ggplot(.,aes(Threshold, Revenue, colour = Variable)) +
   geom_point() +
-  scale_colour_manual(values = palette4[c(5, 1:3)]) +    
-  labs(title = "Figure 9: Revenue by confusion matrix type and threshold",
-       y = "Revenue") +
+  scale_colour_manual(values = palette5[c(5, 1:3)]) +    
+  labs(title = "Figure 9: Revenue by Confusion Matrix Type and Threshold",
+       y = "Benefit") +
   plotTheme() +
-  guides(colour=guide_legend(title = "Confusion Matrix")) 
+  guides(color=guide_legend(title = "Confusion Matrix")) 
+
 
 ```
 
 
 ## Plot of Threshold as a Function of Revenue and Count of Credits
 
-This shows thresholds as function of total revenue and count of people who took the credit
+This shows thresholds as function of total revenue and count of people who took the credit. The bigger the threshold, the lower the revenues. As count of cedits increase, so does the threshold. 
 
 ```{r Small Multiple Plots, echo=TRUE, message=FALSE, warning=FALSE, fig.height=8}
 
@@ -677,6 +721,31 @@ whichThreshold_revenue %>%
 
 ```
 
+```{r Optimal Threshold, echo=TRUE, message=FALSE, warning=FALSE}
+
+optimalthreshold <-
+  whichThreshold_revenue %>%
+  dplyr::select(Threshold, Total_Revenue, Total_Count_Of_Credits)
+
+optimalthreshold_table <-
+  whichThreshold_revenue %>%
+  dplyr::select(Threshold, Total_Revenue, Total_Count_Of_Credits)
+
+optimalthreshold_table <-
+  optimalthreshold %>%
+  filter(row(optimalthreshold) == c(25, 50))
+
+kable(optimalthreshold_table,
+       caption = "Cost Benefit Table") %>% kable_styling()
+```
+
+
 # Conclusion
+
+Predicting probability of tax credit churn and no churn is not an easy task. However our model  
+
+Our model does fairly well at identifying homeowners who were not going to take the credit, which could help HCD save resources by not allocating funds for marketing and information sessions to a group of people who would never accept the credit anyway. However, the model is not the best for identifying those who would take the credit (True Positives). Perhaps adding other features, such as characteristics of homes, location of homes, could improve our model. Additionally, HCD could benefit as well from doing survey work throughout the community as a support for characteristics to help define groups that are likely to accept the credit.  
+
+
 
 
