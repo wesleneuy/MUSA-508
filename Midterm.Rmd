@@ -840,6 +840,7 @@ The bar plots show that home sales prices varied based on the building typology,
 ### Correlation to External Features
 
 ```{r External Features, echo=TRUE, fig.height=12, fig.width=12, message=FALSE, warning=FALSE}
+
 st_drop_geometry(boulder.sf) %>% 
   mutate(Age = 2021 - YearBuilt) %>%
   dplyr::select(price, Age, pctWhite, MedHHInc, medianage, parks_nn1, trails_nn1, schools_nn3, restaurant_nn3, university_nn3, healthcare_nn3) %>%
