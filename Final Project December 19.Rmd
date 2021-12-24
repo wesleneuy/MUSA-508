@@ -241,6 +241,8 @@ ggmap(map) +  geom_point(data=stops, mapping = aes(x=LONGITUDE, y=LATITUDE), col
   mapTheme2()
 
 ```
+
+
 ## 2.2 NJ Transit + Amtrak (NEC) Rail Performance 2019
 
 For our Beta release, we are modeling train delays with a sample of 3 months of data from January to February 2019 using this [dataset](https://www.kaggle.com/pranavbadami/nj-transit-amtrak-nec-performance?select=2018_11.csv), which contains trip-level performance data for the rail system.
@@ -429,7 +431,7 @@ palette16 <- c("#201E5A","#482D81","#5F63AD","#588FCB","#60C7E6", "#94D6DC","#FF
 
 ggplot() +
   geom_sf(data=njCensus, fill="grey90") +
-  geom_sf(data=NECstops.sf, aes(size = boardings, fill = boardings, color = boardings), alpha=0.5, legend=TRUE) +
+  geom_sf(data=NECstops.sf, aes(size = q5(boardings), fill = boardings, color = boardings), alpha=0.5) +
   #geom_point(data= NECstops.sf, aes(size= boardings))
   scale_fill_manual(values = palette16) +
   labs(title="2018 Ridership by NEC Stations") +
@@ -509,7 +511,7 @@ p1 <-  dat1 %>%
   group_by(tod_1) %>%
   summarise(mean_delay = mean(delay_minutes)) %>%
  ggplot(aes(x = tod_1, y=mean_delay)) +
-  geom_bar(stat="identity", fill="#4FA8DE") +
+  geom_bar(stat="identity", fill="#5F63AD", alpha=0.7) +
   labs(x = "",
        y = "Average Delay Minutes",
        title = "Mean Delay Minutes by Different Time",
@@ -581,7 +583,7 @@ stations.sf <- merge(NECstops, stations, by.x="STATION", by.y="to") %>%
 
 ggplot() +
   geom_sf(data = njCensus, fill="grey90") +
-  geom_sf(data = stations.dat, aes(color = mean_delay), size=1, show.legend = "point") +
+  geom_sf(data = stations.sf, aes(color = mean_delay), size=1, show.legend = "point") +
   labs(title= "Delays by station") +
   scale_color_viridis()
   #plotTheme2()
@@ -704,8 +706,6 @@ train.weather.panel <- merge(x=train.panel, y= weather, by= 'interval60', all.x=
 
 # Building Time Lags 
 
-table(train.weather.panel.lags.final$mean_delay)
-
 train.weather.panel <- train.weather.panel %>%
   group_by(interval60) %>% #na.omit() %>%
   summarise(mean_delay = mean_delay,
@@ -744,21 +744,23 @@ stoplag <- dat_all %>%
 stoplag[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")][is.na(stoplag[c("onestoplag", "twostoplag", "onestopearlieron", "twostopearlieron")])] <- 0
 
 train.weather.panel.lags.final <- left_join(train.weather.panel, stoplag, by=c( "interval60"))
+
+#table(train.weather.panel.lags.final$mean_delay)
+
 ```
 
 
 ```{r FE-2.2, echo=TRUE, message=FALSE, warning=FALSE}
+
 # Final Panel Setup 
 panelnoGEOM <- train.weather.panel.lags.final %>% 
   mutate(Delay4_numeric = ifelse(mean_delay <= minutes(4), 0, 1),
          Delay4 = ifelse(mean_delay <= minutes(4), "no", "yes"),
          hour= hour(interval60),
          daynumeric= wday(interval60),
-         week = week(interval60))
-         # weekday = weekdays(intervalhour),
-         # week_numeric = as.numeric(week))
-
-summary(panelnoGEOM$Delay4_numeric)
+         week = week(interval60),
+         weekday = weekdays(interval60),
+         week_numeric = as.numeric(week))
 
 panelnoGEOM <- panelnoGEOM %>%
   mutate(STATION_ID = from) 
@@ -820,12 +822,12 @@ rbind(mutate(panelnoGEOMTrain, Legend = "Training"),
       ggplot(aes(interval60, mean_delay_minutes, colour = Legend)) + 
       geom_line() +
         scale_colour_manual(values = palette2) +
-        geom_vline(data = mondays, aes(xintercept = monday)) +
+        geom_vline(data = panelnoGEOM, aes(xintercept = week_numeric)) +
         labs(title="NJ Transit Rail Trips by Week",
              subtitle="January-February 2021",
-             x="Day", y="Mean Delay Minutes",
+             x="Week", y="Mean Delay Minutes",
              caption = "Figure 4.1") +
-        plotTheme() + 
+        #plotTheme() + 
         theme(panel.grid.major = element_blank())  
 ```
 
@@ -862,17 +864,18 @@ stargazer(Model3, type="text", title="Regression Results", font.size = "small", 
 After testing multiple models, we landed into one model that gave us an r-square of 16%. The following time series help to confirm one more time the model's performances, as well as the predicted versus observed values.  
 
 
-```{r }
+```{r Evaluation, echo=TRUE, message=FALSE, warning=FALSE}
+
+panelnoGEOMTest.weekNest <- panelnoGEOMTest %>% 
+  group_by(week) %>%
+  tidyr::nest()
 
 # predict function
 model_pred <- function(dat, fit)
   {
    pred <- predict(fit, newdata = dat)}
 
-
-panelnoGEOMTest.weekNest <- as.data.frame(panelnoGEOMTest) %>%
-  tidyr::nest()
-  #nest(-week) 
+#tidyr::nest(data = c(week))
 
 #predictions
 week_predictions <- 
@@ -881,55 +884,130 @@ week_predictions <-
            BTimeLag_Space_FE = map(.x = data, fit = Model2, .f = model_pred),
            CTimeLag_SpaceLag_FE = map(.x = data, fit = Model3, .f = model_pred)) %>% 
     gather(Regression, Prediction, -data, -week) %>%
-    mutate(Observed = map(data, pull, delay_minutes),
+    mutate(Observed = map(data, pull, mean_delay),
            Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
            MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
            sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE))
 
 
+#MAE by Model
+week_predictions %>% 
+  dplyr::select(Regression, MAE, week) %>%  
+  gather(Variable, MAE, -Regression, -week) %>% 
+  ggplot(aes(week, MAE)) + 
+    geom_bar(aes(fill = Regression), position = "dodge", stat="identity") +
+    scale_fill_manual(values = palette7) +
+    labs(title = "Mean Absolute Errors (MAE) by model specification and week",
+         caption="Figure 4.2") +
+  plotTheme2()
+
+glimpse(week_predictions)
+
+```
+
+```{r Obs vs Pred, echo=TRUE, message=FALSE, warning=FALSE, fig.align= center}
+
+#Observed vs Predicted
 week_predictions %>% 
   mutate(interval60 = map(data, pull, interval60),
-         from_station_id = map(data, pull, start_station)) %>%
-  dplyr::select(interval60, from_station_id, Observed, Prediction, Regression) %>%
+         from_station = map(data, pull, STATION_ID)) %>%
+  dplyr::select(interval60, from_station, Observed, Prediction, Regression) %>%
   unnest() %>%
   na.omit() %>%
-  gather(Variable, Value, -Regression, -interval60, -from_station_id) %>%
+  gather(Variable, Value, -Regression, -interval60, -from_station, -week) %>%
   group_by(Regression, Variable, interval60) %>%
   summarize(Value = sum(Value)) %>%
   ggplot(aes(interval60, Value, colour=Variable)) + 
-  geom_line(size = 1.1) + 
-  scale_color_manual(values = palette2)+
+  geom_line(size = 0.6) + 
+  scale_color_manual(values = palette6)+
   facet_wrap(~Regression, ncol=1) +
-  labs(title = "Predicted/Observed Bike Share Time Series", x = "Hour", y= "Station Trips") +
+  labs(title = "Predicted/Observed NJ Train Delays", x = "Hour", y= "Station") +
   plotTheme2()
-
 ```
 
+
+
 Plotting the MAE/errors on the map
-```{r }
-week_predictions %>% 
-  mutate(interval60 = map(data, pull, interval60),
-         start_station = map(data, pull, start_station), 
-         start_lat = map(data, pull, start_lat), 
-         start_lon = map(data, pull, start_lon)) %>%
-  select(interval60, start_station, start_lat, start_lon, Observed, Prediction, Regression) %>%
-  unnest() %>%
-  filter(Regression == "E_Time_Space_Amenities_TimeLags") %>%
-  group_by(start_station, start_lat, start_lon) %>%
-  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
-  ggplot(.)+
-  geom_sf(data = phillyCensus, color = "grey")+
-  geom_point(aes(x = start_lon, y = start_lat, color = MAE), 
-             fill = "transparent", alpha = 1)+
-  scale_colour_viridis(direction = -1,
-                       discrete = FALSE, option = "C")+
-  ylim(min(indego_census$start_lat), max(indego_census$start_lat))+
-  xlim(min(indego_census$start_lon), max(indego_census$start_lon))+
-  labs(title="Mean Absolute Error for Model E",
-       subtitle="Test Set")+
+
+```{r MAE maps, echo=TRUE, message=FALSE, warning=FALSE}
+
+ggplot() +
+  geom_sf(data = njCensus, fill="transparent", color = "grey") +
+  geom_sf(data = (week_predictions %>% 
+                      mutate(interval60 = map(data, pull, interval60),
+                             to = map(data, pull, STATION_ID)) %>%
+                      dplyr::select(interval60, to, Observed, Prediction, Regression, -week) %>%
+                      unnest(cols = c(interval60, to, Observed, Prediction)) %>% 
+                      #filter(Regression %in% c("DTime_Space_FE_timeLags")) %>%
+                      group_by(interval60, Regression, to) %>%
+                      summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+                      left_join(stations.sf, by = c("to" = "STATION")) %>%
+                      st_as_sf()), aes(color = MAE, geometry=geometry)) +
+  scale_color_gradient(high = "#f95738", low = "#fabbaf", limits = c(0, 0.2), na.value="#f0f0f0") +
+  facet_wrap(~Regression, ncol=4) +
+  labs(title="Mean Absolute Errors (MAE) of Test Set by Model", 
+       #subtitle="4 Regression Models", 
+       caption = "Figure 4.4") +
   mapTheme2()
 
 ```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+ppm_validation <- week_predictions %>% 
+    #mutate(delay_minutes = map(data, pull, delay_minutes)) %>%
+    dplyr::select(Observed, Prediction, Regression, -week) %>%
+    unnest(cols = c(Observed, Prediction)) %>% 
+    filter(Regression %in% c("C Time_Space_FE_timeLags"))  %>%
+    mutate(ppm_5 = ifelse(Observed < 5, "1", "0"),
+           ppm_10 = ifelse(Observed < 10, "1", "0"),
+           ppm_20 = ifelse(Observed < 20, "1", "0"),
+           ppm_20plus = ifelse(Observed >= 20, "1", "0"))
+
+ggarrange(ncol=2, nrow=2,
+  ggplot(filter(ppm_validation, ppm_5 == "1")) +
+      geom_histogram(aes(Prediction), binwidth = 0.5, fill = palette2[2], alpha=0.8, na.rm = TRUE)+
+      geom_vline(aes(xintercept = 5), colour=palette2[1], size=0.8) +
+      #xlim(0, 100) +
+      labs(x="Predicted Delay Minutes", 
+           y="Frequency",
+           title="Actual delay time within 5 minutes",
+           caption=" ")+
+      plotTheme(),
+  ggplot(filter(ppm_validation, ppm_10 == "1")) +
+      geom_histogram(aes(Prediction), binwidth = 0.5, fill = palette2[2], alpha=0.8, na.rm = TRUE)+
+      geom_vline(aes(xintercept = 10), colour=palette2[1], size=0.8) +
+      #xlim(0, 100) +
+      labs(x="Predicted Delay Minutes", 
+           y="Frequency",
+           title="Actual delay time within 10 minutes",
+           caption=" ")+
+      plotTheme(),
+  ggplot(filter(ppm_validation, ppm_20 == "1")) +
+      geom_histogram(aes(Prediction), binwidth = 0.5, fill = palette2[2], alpha=0.8, na.rm = TRUE)+
+      geom_vline(aes(xintercept = 20), colour=palette2[1], size=0.8) +
+      #xlim(0, 100) +
+      labs(x="Predicted Delay Minutes", 
+           y="Frequency",
+           title="Actual delay time within 20 minutes",
+           caption="Figure 4.5")+
+      plotTheme(),
+  ggplot(filter(ppm_validation, ppm_20plus == "1")) +
+      geom_histogram(aes(Prediction), binwidth = 0.5, fill = palette2[2], alpha=0.8, na.rm = TRUE)+
+      geom_vline(aes(xintercept =20), colour=palette2[1], size=0.8) +
+      #xlim(0, 100) +
+      labs(x="Predicted Delay Minutes", 
+           y="Frequency",
+           title="Actual delay time above 20 minutes",
+           caption=" ")+
+      plotTheme())
+
+```
+
+
+
+
 
 Cross Validation
 ```{r }
